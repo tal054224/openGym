@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import { useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
-import { bwSheet, goalSheet } from './sheets.jsx'
+import { bwSheet, goalSheet, weighInsSheet } from './sheets.jsx'
 
 // The big weight read-out (body weight, goal, top weight after an exercise) used to be text:
 // the only ways to a number were the slider, ±0.1 and the ±0.5/±1 chips, so 72.3 → 85.7 was a
@@ -78,6 +78,32 @@ describe('weight read-out is a typable field', () => {
     expect(bw).toHaveLength(1)
     expect(bw[0].w).toBe(82.6)
     expect(useUI.getState().sheets).toHaveLength(0)
+  })
+
+  it('stores the Navy estimate with the dated weigh-in and shows it in history', () => {
+    const { host, button } = renderBw()
+    const navyToggle = [...host.querySelectorAll('button')].find(b => b.textContent.includes('US Navy body-fat estimate'))
+    act(() => navyToggle.click())
+    const field = label => [...host.querySelectorAll('label')].find(el => el.textContent.trim() === label).querySelector('input')
+    act(() => type(field('Height (cm)'), '182.88'))
+    act(() => type(field('Waist at navel (cm)'), '86.36'))
+    act(() => type(field('Neck (cm)'), '40.64'))
+    act(() => button('Save').click())
+
+    const [entry] = useStore.getState().S.bodyweight
+    expect(entry.navy).toEqual({
+      method: 'us_navy', sex: 'male', height: 182.88, waist: 86.36, neck: 40.64,
+      unit: 'cm', bodyFat: 14.6
+    })
+
+    weighInsSheet()
+    const sheet = useUI.getState().sheets.at(-1)
+    const history = document.createElement('div')
+    document.body.appendChild(history)
+    const root = createRoot(history)
+    mounted.push(root)
+    act(() => root.render(sheet.render(() => useUI.getState().closeSheet(sheet.id))))
+    expect(history.textContent).toContain('Body fat 14.6%')
   })
 
   it('lets a typed weight sit past the slider ceiling rather than cutting it off', () => {

@@ -386,11 +386,27 @@ export const getBodyweight = {
       unit: S.unit || 'kg',
       goal,
       count: bw.length,
-      latest: latest ? { date: latest.d, weight: latest.w, delta_vs_goal: goal != null ? Math.round((latest.w - goal) * 10) / 10 : null } : null,
+      latest: latest ? {
+        date: latest.d,
+        weight: latest.w,
+        delta_vs_goal: goal != null ? Math.round((latest.w - goal) * 10) / 10 : null,
+        body_fat_percent: Number.isFinite(latest.navy?.bodyFat) ? latest.navy.bodyFat : null
+      } : null,
       entries: bw.map(b => ({
         date: b.d,
         weight: b.w,
-        delta_vs_goal: goal != null ? Math.round((b.w - goal) * 10) / 10 : null
+        delta_vs_goal: goal != null ? Math.round((b.w - goal) * 10) / 10 : null,
+        body_fat_percent: Number.isFinite(b.navy?.bodyFat) ? b.navy.bodyFat : null,
+        navy: Number.isFinite(b.navy?.bodyFat) ? {
+          method: 'us_navy',
+          sex: b.navy.sex,
+          height: b.navy.height,
+          waist: b.navy.waist,
+          neck: b.navy.neck,
+          hip: b.navy.hip ?? null,
+          measurement_unit: b.navy.unit,
+          body_fat_percent: b.navy.bodyFat
+        } : null
       }))
     }
   }

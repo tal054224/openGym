@@ -70,6 +70,7 @@ export default function Home() {
   // session in progress: the row takes you back to it as an edit, the way the tab bar does.
   const editingSaved = !!S.active?.editingWorkoutId
   const bw = lastBW(S)
+  const latestNavy = [...S.bodyweight].reverse().find(b => b.d <= todayISO() && Number.isFinite(b.navy?.bodyFat))
   const prevBW = S.bodyweight.length > 1 ? S.bodyweight[S.bodyweight.length - 2] : null
   const delta = bw && prevBW ? bw.w - prevBW.w : null
 
@@ -239,6 +240,9 @@ export default function Home() {
           )}
           <span className="dim small" style={{ marginInlineStart: 'auto' }}>{fmtDate(bw.d, true)}</span>
         </div>
+        {latestNavy && <div className="small" style={{ color: 'var(--green)', marginTop: 4 }}>
+          {t('Body fat {0}%', fmtNum(latestNavy.navy.bodyFat))}{latestNavy.d !== bw.d ? ` · ${fmtDate(latestNavy.d, true)}` : ''}
+        </div>}
         {S.targetW && (
           <div className="small row" style={{ color: 'var(--yellow)', marginTop: 4, gap: 5 }}>
             <Icon name="target" style={{ fontSize: 13 }} />

@@ -578,6 +578,24 @@ describe('get_bodyweight', () => {
     r.entries.forEach(e => expect(e.delta_vs_goal).toBeNull())
     expect(r.latest.delta_vs_goal).toBeNull()
   })
+
+  test('returns saved Navy estimates through the read tool without adding a Navy editor', () => {
+    S.bodyweight = S.bodyweight.filter(entry => entry.d !== FAKE_TODAY_ISO)
+    S.bodyweight.push({
+      d: FAKE_TODAY_ISO,
+      w: 78.3,
+      navy: { method: 'us_navy', sex: 'female', height: 165, waist: 76, neck: 33, hip: 98, unit: 'cm', bodyFat: 28.4 }
+    })
+
+    const result = call('get_bodyweight')
+    expect(result.latest.body_fat_percent).toBe(28.4)
+    expect(result.latest.date).toBe(FAKE_TODAY_ISO)
+    expect(result.entries.at(-1).navy).toEqual({
+      method: 'us_navy', sex: 'female', height: 165, waist: 76, neck: 33, hip: 98,
+      measurement_unit: 'cm', body_fat_percent: 28.4
+    })
+    expect(TOOLS.some(tool => /navy/i.test(tool.name))).toBe(false)
+  })
 })
 
 /* ---------- estimate_1rm ---------- */

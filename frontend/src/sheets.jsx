@@ -53,6 +53,7 @@ import { moveWorkout, sameWorkout, startTimeOf, durationMinOf, setWorkoutDuratio
 import { editCompletedSession, editLeftEmpty, editedRecord, editChangesNothing } from './lib/session-edit.js'
 import { stampWorkout } from './lib/sync-merge.js'
 import { weeklyWeights } from './lib/bodyweight.js'
+import { estimateNavyBodyFat } from './lib/navy-body-fat.js'
 import { workoutText } from './lib/workout-text.js'
 import { copyText } from './lib/clipboard.js'
 import { queueRemaining, pinState } from './lib/queue.js'
@@ -273,14 +274,38 @@ function BwSheet({ required, onDone, close }) {
   const unit = st.unit
   const bw = lastBW(st)
   const [v, setV] = useState(bw ? bw.w : 70)
+  const todayEntry = st.bodyweight.find(b => b.d === todayISO())
+  const [navyOpen, setNavyOpen] = useState(!!todayEntry?.navy)
+  const [navy, setNavy] = useState(() => ({
+    sex: todayEntry?.navy?.sex || 'male',
+    height: todayEntry?.navy?.height ?? '',
+    waist: todayEntry?.navy?.waist ?? '',
+    neck: todayEntry?.navy?.neck ?? '',
+    hip: todayEntry?.navy?.hip ?? ''
+  }))
+  const measureUnit = unit === 'lb' ? 'in' : 'cm'
+  const bodyFat = estimateNavyBodyFat({ ...navy, unit: measureUnit })
   const save = () => {
     const n = Math.round((v || 0) * 10) / 10
     if (!n || n <= 0) { toast(t('Enter a valid weight')); return }
     if (bwTooHeavy(n, unit)) return
+    const hasNavyValues = [navy.height, navy.waist, navy.neck, navy.hip].some(value => value !== '')
+    if (hasNavyValues && bodyFat == null) { toast(t('Complete valid measurements for the estimate')); return }
+    const navyRecord = bodyFat == null ? null : {
+      method: 'us_navy', sex: navy.sex, height: Number(navy.height),
+      waist: Number(navy.waist), neck: Number(navy.neck),
+      ...(navy.sex === 'female' ? { hip: Number(navy.hip) } : {}),
+      unit: measureUnit, bodyFat
+    }
     update(s => {
       const iso = todayISO()
       const ex = s.bodyweight.find(b => b.d === iso)
-      if (ex) { ex.w = n; ex.t = Date.now() } else s.bodyweight.push({ d: iso, w: n, t: Date.now() })
+      if (ex) {
+        ex.w = n
+        ex.t = Date.now()
+        if (navyRecord) ex.navy = navyRecord
+        else delete ex.navy
+      } else s.bodyweight.push({ d: iso, w: n, t: Date.now(), ...(navyRecord ? { navy: navyRecord } : {}) })
       s.bodyweight.sort((a, b) => (a.d < b.d ? -1 : 1))
     })
     close()
@@ -302,6 +327,28 @@ function BwSheet({ required, onDone, close }) {
       : <h3>{t('Log body weight')}</h3>}
     <div className="muted small">{required ? t('Slide or tap to set your weight. We ask before every workout so your curve stays honest.') : t('Today') + ', ' + fmtDate(todayISO(), true)}</div>
     <WeightInput value={v} setValue={setV} unit={unit} />
+    {!required && <>
+      <button aria-expanded={navyOpen} className="row between" style={{ width: '100%', margin: '14px 0 4px', padding: '10px 2px', borderTop: '1px solid var(--sep)', color: 'var(--text)' }} onClick={() => setNavyOpen(open => !open)}>
+        <span>{t('US Navy body-fat estimate')}{bodyFat != null ? ` · ${t('Body fat {0}%', fmtNum(bodyFat))}` : ''}</span>
+        <Icon name={navyOpen ? 'chevronDown' : 'chevronRight'} />
+      </button>
+      {navyOpen && <div style={{ display: 'grid', gap: 10, marginBottom: 12 }}>
+        <Segmented options={[{ value: 'male', label: t('Male') }, { value: 'female', label: t('Female') }]} value={navy.sex}
+          onChange={sex => setNavy(current => ({ ...current, sex }))} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+          {[
+            ['height', t('Height ({0})', measureUnit)],
+            ['waist', navy.sex === 'male' ? t('Waist at navel ({0})', measureUnit) : t('Waist ({0})', measureUnit)],
+            ['neck', t('Neck ({0})', measureUnit)], ...(navy.sex === 'female' ? [['hip', t('Hip ({0})', measureUnit)]] : [])
+          ].map(([key, label]) => <label key={key} className="small muted" style={{ display: 'grid', gap: 4 }}>
+            {label}
+            <input className="input" type="number" inputMode="decimal" min="0" step="0.1" value={navy[key]}
+              onChange={event => setNavy(current => ({ ...current, [key]: event.target.value }))} />
+          </label>)}
+        </div>
+        {bodyFat != null && <div className="small" style={{ color: 'var(--green)' }}>{t('Body fat {0}%', fmtNum(bodyFat))}</div>}
+      </div>}
+    </>}
     <div style={{ height: 14 }} />
     <Button variant="primary" onClick={save}>{required ? t('Save & start workout') : t('Save')}</Button>
     {required && <>
@@ -336,7 +383,9 @@ function WeighInRow({ b, unit, confirm = false }) {
   })
   return <div className="row between" style={{ padding: '9px 2px', borderBottom: '1px solid var(--sep)' }}>
     <span className="small muted">{fmtDate(b.d, true)}</span>
-    <span className="row" style={{ gap: 12 }}><b>{fmtNum(b.w)} {unit}</b>
+    <span className="row" style={{ gap: 12 }}>
+      {b.navy && <span className="small dim">{t('Body fat {0}%', fmtNum(b.navy.bodyFat))}</span>}
+      <b>{fmtNum(b.w)} {unit}</b>
       <button className="iconbtn" style={{ width: 32, height: 30, borderRadius: 8, fontSize: 15, color: 'var(--red)' }} onClick={confirm ? ask : delEntry} aria-label={t('Delete weigh-in')}><Icon name="trash" /></button></span>
   </div>
 }
