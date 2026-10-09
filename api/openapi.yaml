@@ -157,6 +157,15 @@ tags:
     description: >-
       AI Coach: plans, reviews and debriefs. Every route here answers 503 unless the
       instance has the Coach switched on and a provider connected.
+  - name: food
+    description: >-
+      Food log and daily nutrition goals (homelab fork), stored in the profile's existing
+      `DATA_DIR/state-<uid>.json` document alongside workout data.
+  - name: mcp
+    description: >-
+      Remote MCP link codes and connected-client management (homelab fork). Link codes are
+      one-use, expire after five minutes and are stored only as hashes.
+      Every entry belongs to one profile; another profile's entry answers 404.
 
 security:
   - cookieAuth: []
@@ -2076,6 +2085,299 @@ paths:
               schema: { $ref: '#/components/schemas/Ok' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /api/food:
+    get:
+      tags: [food]
+      operationId: listFood
+      summary: List food log entries in a date range
+      description: >-
+        Entries of the caller's profile between `from` and `to` (inclusive, at most 366 days),
+        oldest first. Paged with `limit` (1-200, default 100) and the opaque `cursor` from the
+        previous page's `next_cursor`. Unknown query parameters are refused. Also reachable with
+        service auth (`X-OpenGym-Service-Token` + `X-OpenGym-Profile`) from the homelab MCP service.
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: One page of entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/FoodLog' } }
+                  next_cursor: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/FoodInvalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [food]
+      operationId: createFood
+      summary: Log a food entry
+      description: >-
+        Creates one entry. Unknown fields are refused (400, `field` names the first one). Body
+        limit 16 KiB. With `idempotency_key` a retried request returns the original entry (200)
+        instead of a duplicate; the same key with a different body answers 409
+        `idempotency-key-reuse`. `source` is set by the server (`ui` for a session, `mcp` for
+        service auth). 120 writes a minute per profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FoodLogCreate' }
+            example: { date: "2026-10-09", time: "08:15", meal: breakfast, name: "Oatmeal", quantity: 80, unit: g, calories: 300, protein_g: 10, carbs_g: 54, fat_g: 6 }
+      responses:
+        '201':
+          description: Created.
+          content: { application/json: { schema: { $ref: '#/components/schemas/FoodLog' } } }
+        '200':
+          description: An idempotent replay; the entry created by the first request.
+          content: { application/json: { schema: { $ref: '#/components/schemas/FoodLog' } } }
+        '400': { $ref: '#/components/responses/FoodInvalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: The idempotency key was already used for a different entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: "idempotency key already used for a different entry", code: "idempotency-key-reuse" }
+        '413': { description: Body over 16 KiB. }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/food/summary:
+    get:
+      tags: [food]
+      operationId: foodSummary
+      summary: Nutrition totals per day and for a range
+      description: >-
+        Calories and macros summed per logged day and over the whole range (at most 366 days),
+        with the profile's goals. `entries_missing_calories` counts entries logged without a
+        calorie value, so a low total can be told apart from an incomplete one.
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: The summary.
+          content: { application/json: { schema: { $ref: '#/components/schemas/NutritionSummary' } } }
+        '400': { $ref: '#/components/responses/FoodInvalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/food/goals:
+    get:
+      tags: [food]
+      operationId: getFoodGoals
+      summary: The profile's daily nutrition goals
+      responses:
+        '200':
+          description: The goals, or null when none are set.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  goals: { oneOf: [{ $ref: '#/components/schemas/NutritionGoals' }, { type: 'null' }] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [food]
+      operationId: setFoodGoals
+      summary: Set the daily nutrition goals
+      description: >-
+        Replaces all four goals; an omitted or null field clears that goal. Session only: service
+        auth answers 403 here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NutritionGoalsInput' }
+            example: { calories: 2400, protein_g: 160, carbs_g: 260, fat_g: 70 }
+      responses:
+        '200':
+          description: The stored goals.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  goals: { $ref: '#/components/schemas/NutritionGoals' }
+        '400': { $ref: '#/components/responses/FoodInvalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/food/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [food]
+      operationId: getFood
+      summary: One food log entry
+      responses:
+        '200':
+          description: The entry.
+          content: { application/json: { schema: { $ref: '#/components/schemas/FoodLog' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 'No such entry on this profile (also the answer for another profile''s entry).' }
+    put:
+      tags: [food]
+      operationId: updateFood
+      summary: Update a food log entry
+      description: >-
+        Partial update: only the fields sent change; `null` clears an optional field. `version`
+        is required and must equal the entry's current version, otherwise 409 with the current
+        entry. Unknown fields are refused.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FoodLogUpdate' }
+            example: { version: 1, calories: 320 }
+      responses:
+        '200':
+          description: The updated entry (version incremented).
+          content: { application/json: { schema: { $ref: '#/components/schemas/FoodLog' } } }
+        '400': { $ref: '#/components/responses/FoodInvalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: No such entry on this profile. }
+        '409': { $ref: '#/components/responses/FoodConflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    delete:
+      tags: [food]
+      operationId: deleteFood
+      summary: Delete a food log entry
+      description: With `?version=N` the delete only happens if the entry is still at that version.
+      parameters:
+        - { name: version, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Deleted.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } }
+        '400': { $ref: '#/components/responses/FoodInvalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: No such entry on this profile. }
+        '409': { $ref: '#/components/responses/FoodConflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/account/mcp-link:
+    post:
+      tags: [mcp]
+      operationId: createMcpLinkCode
+      summary: Create a one-time MCP link code
+      description: >-
+        Requires a signed-in session and fresh passkey or current-password proof. The code has
+        130 bits of entropy, expires after five minutes, replaces any earlier unused code for
+        this profile, and is returned only once. Only its hash is stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                current: { type: string, description: Current password when password sign-in is enabled. }
+                cid: { type: string, description: Passkey step-up challenge id. }
+                credential: { type: object, description: Passkey assertion for step-up. }
+      responses:
+        '200':
+          description: One-time code and expiry timestamp (milliseconds since epoch).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, expires]
+                properties:
+                  code: { type: string }
+                  expires: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/internal/mcp/link-code/redeem:
+    post:
+      tags: [mcp]
+      operationId: redeemMcpLinkCode
+      summary: Redeem an MCP link code (service only)
+      description: >-
+        Internal endpoint. Requires `X-OpenGym-Service-Token`; accepts no session or profile
+        header. A valid code is burned before the profile id is returned.
+      security:
+        - serviceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: { type: string, maxLength: 32 }
+      responses:
+        '200':
+          description: The profile to bind to the OAuth authorization.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [profile_id]
+                properties:
+                  profile_id: { type: string }
+        '400': { $ref: '#/components/responses/FoodInvalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Code invalid, expired, or already used. }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/account/mcp-apps:
+    get:
+      tags: [mcp]
+      operationId: listMcpApps
+      summary: List clients connected to this profile's MCP account
+      responses:
+        '200':
+          description: Connected OAuth clients.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        client_id: { type: string }
+                        client_name: { type: string }
+                        created_at: { type: string, format: date-time }
+                        last_used_at: { type: [string, 'null'], format: date-time }
+                        scopes: { type: array, items: { type: string } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Remote MCP is not configured on this instance. }
+        '502': { description: Remote MCP service is unavailable. }
+
+  /api/account/mcp-apps/revoke:
+    post:
+      tags: [mcp]
+      operationId: revokeMcpApp
+      summary: Revoke one connected MCP client or all clients for this profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                client_id: { type: string, maxLength: 100 }
+                all: { type: boolean }
+      responses:
+        '200': { description: Revoked. }
+        '400': { $ref: '#/components/responses/FoodInvalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Remote MCP is not configured on this instance. }
+        '502': { description: Remote MCP service is unavailable. }
+
   /api/admin/users:
     get:
       tags: [admin]
@@ -2934,6 +3236,18 @@ components:
         The same signed session token, carried as `Authorization: Bearer <token>` by
         the paired mobile app (obtained from `POST /api/pair/redeem`). Bearer requests
         skip the CSRF origin check; a browser never attaches this header on its own.
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-OpenGym-Service-Token
+      description: >-
+        Shared secret for the isolated MCP service. Only explicit service routes accept it;
+        writes outside food and MCP link redemption are refused by the API.
+    serviceProfile:
+      type: apiKey
+      in: header
+      name: X-OpenGym-Profile
+      description: The profile id resolved from the OAuth token; required on profile-scoped service routes.
 
   responses:
     Unauthorized:
@@ -2948,6 +3262,26 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
           example: { error: "forbidden" }
+    FoodInvalid:
+      description: A field or query parameter is unknown, missing or out of bounds; `field` names it.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+              field: { type: string }
+          example: { error: "unknown field", field: "brand" }
+    FoodConflict:
+      description: The entry changed since it was read; `current` is the stored entry.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+              code: { type: string, enum: [version-conflict] }
+              current: { $ref: '#/components/schemas/FoodLog' }
     CoachOff:
       description: >-
         The Coach is not set up on this instance (switched off, or no provider connected).
@@ -3061,6 +3395,102 @@ components:
           example: { error: "that code is wrong, used or expired", code: "link-invalid" }
 
   schemas:
+    FoodLogCreate:
+      type: object
+      additionalProperties: false
+      required: [date, meal, name]
+      properties:
+        date: { type: string, format: date, description: 'Local calendar date, YYYY-MM-DD (2000-2100).' }
+        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
+        meal: { type: string, enum: [breakfast, lunch, dinner, snack] }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        quantity: { type: number, exclusiveMinimum: 0, maximum: 10000 }
+        unit: { type: string, enum: [g, ml, piece, serving, cup, tbsp, tsp, oz] }
+        calories: { type: number, minimum: 0, maximum: 20000 }
+        protein_g: { type: number, minimum: 0, maximum: 2000 }
+        carbs_g: { type: number, minimum: 0, maximum: 2000 }
+        fat_g: { type: number, minimum: 0, maximum: 2000 }
+        notes: { type: string, maxLength: 500 }
+        idempotency_key: { type: string, pattern: '^[A-Za-z0-9._:-]{1,100}$' }
+    FoodLogUpdate:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: { type: integer, minimum: 1 }
+        date: { type: string, format: date }
+        time: { type: [string, 'null'] }
+        meal: { type: string, enum: [breakfast, lunch, dinner, snack] }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        quantity: { type: [number, 'null'] }
+        unit: { type: [string, 'null'], enum: [g, ml, piece, serving, cup, tbsp, tsp, oz, null] }
+        calories: { type: [number, 'null'] }
+        protein_g: { type: [number, 'null'] }
+        carbs_g: { type: [number, 'null'] }
+        fat_g: { type: [number, 'null'] }
+        notes: { type: [string, 'null'], maxLength: 500 }
+    FoodLog:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        date: { type: string, format: date }
+        time: { type: [string, 'null'] }
+        meal: { type: string, enum: [breakfast, lunch, dinner, snack] }
+        name: { type: string }
+        quantity: { type: [number, 'null'] }
+        unit: { type: [string, 'null'] }
+        calories: { type: [number, 'null'] }
+        protein_g: { type: [number, 'null'] }
+        carbs_g: { type: [number, 'null'] }
+        fat_g: { type: [number, 'null'] }
+        notes: { type: [string, 'null'] }
+        source: { type: string, enum: [ui, mcp] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        version: { type: integer }
+        idempotency_key: { type: [string, 'null'] }
+    NutritionGoalsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        calories: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 20000 }
+        protein_g: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 2000 }
+        carbs_g: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 2000 }
+        fat_g: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 2000 }
+    NutritionGoals:
+      allOf:
+        - $ref: '#/components/schemas/NutritionGoalsInput'
+        - type: object
+          properties:
+            updated_at: { type: string, format: date-time }
+    NutritionSummary:
+      type: object
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        days_logged: { type: integer }
+        totals:
+          type: object
+          properties:
+            entries: { type: integer }
+            calories: { type: number }
+            protein_g: { type: number }
+            carbs_g: { type: number }
+            fat_g: { type: number }
+        days:
+          type: array
+          items:
+            type: object
+            properties:
+              date: { type: string, format: date }
+              entries: { type: integer }
+              calories: { type: number }
+              protein_g: { type: number }
+              carbs_g: { type: number }
+              fat_g: { type: number }
+              entries_missing_calories: { type: integer }
+        goals: { oneOf: [{ $ref: '#/components/schemas/NutritionGoals' }, { type: 'null' }] }
     Error:
       type: object
       required: [error]

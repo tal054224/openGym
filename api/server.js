@@ -35,6 +35,10 @@ import { effectiveRoutineId } from './queue.js';
 import { stampPut } from './sync-stamps.js';
 import { atomicWrite as durableWrite } from './durable.js';
 import { nudgeFor, nudgeWindowOpen, toneOf } from './nudge.js';
+import { createFoodStore } from './food-store.js';
+import { foodRoutes } from './food.js';
+import { loadServiceSecret, checkService } from './service-auth.js';
+import { mcpLinkRoutes } from './mcp-links.js';
 
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
@@ -114,6 +118,9 @@ const secretFile = path.join(DATA, 'secret');
 if (!fs.existsSync(secretFile)) fs.writeFileSync(secretFile, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
 const SECRET = fs.readFileSync(secretFile, 'utf8').trim();
 
+// Homelab: food uses the profile's existing state document; the MCP secret is service-only.
+const SERVICE_SECRET = loadServiceSecret(process.env.MCP_SERVICE_TOKEN_FILE || '');
+
 const dbFile = path.join(DATA, 'db.json');
 // Every account, passkey and invite. Only a missing file starts empty: an unreadable one (a write
 // cut short by a power loss, a damaged restore) used to boot with no users at all, and the first
@@ -146,6 +153,7 @@ db.creds = db.creds || [];
 db.subs = db.subs || [];
 db.invites = db.invites || [];
 db.deviceLinks = db.deviceLinks || [];   // unused one-time device links, hashed (device-link.js)
+db.mcpLinks = db.mcpLinks || [];         // one-time remote MCP link codes, hashed
 const isAdmin = user => !!user && (user.admin === true || ADMIN_UIDS.includes(user.id));
 // 0600: db.json holds passkey credential material. It used to be covered by a blanket 0700 on
 // the whole directory; now that the directory stays traversable, the file carries its own mode.
@@ -193,8 +201,8 @@ function readStateStrict(uid) {
 }
 // A stored document as a client gets it: without the server's own notes `_unstamped` and `_prior`.
 function forClient(S) {
-  if (!S || typeof S !== 'object' || !('_unstamped' in S || '_prior' in S)) return S;
-  const { _unstamped, _prior, ...rest } = S;
+  if (!S || typeof S !== 'object') return S;
+  const { _unstamped, _prior, foodLogs, nutritionGoals, ...rest } = S;
   return rest;
 }
 // An entry is an object a reader can dereference, and `records` is every entry of a stored
@@ -455,6 +463,28 @@ function readStateCached(uid) {
   while (stateCache.size > STATE_CACHE_MAX) stateCache.delete(stateCache.keys().next().value);
   return S;
 }
+// Food endpoints mutate the same profile document as /api/data, advancing the usual revision and
+// write ancestry. Food fields stay server-managed and are hidden by forClient below.
+function writeFoodState(uid, S) {
+  const prior = readStateStrict(uid);
+  if (prior === UNREADABLE) throw new Error('profile state is unreadable');
+  const rev = Number(prior?._rev) || 0;
+  S._rev = rev + 1;
+  S._wids = [...(Array.isArray(prior?._wids) ? prior._wids : []), ...(prior?._wid ? [prior._wid] : [])]
+    .filter(x => typeof x === 'string').slice(-WID_KEEP);
+  S._wid = crypto.randomBytes(8).toString('hex');
+  S._ts = Math.max(Date.now(), (Number(prior?._ts) || 0) + 1);
+  atomicWrite(stateFile(uid), JSON.stringify(S));
+  stateCache.delete(uid);
+}
+const FOOD = createFoodStore({
+  readState: uid => {
+    const state = readStateStrict(uid);
+    if (state === UNREADABLE) throw new Error('profile state is unreadable');
+    return state;
+  },
+  writeState: writeFoodState
+});
 // Missed-workout nudge (nudge.js): opt-in on top of the reminder, so it needs everything the
 // reminder does (a push subscription, the reminder on, a zone). Owed from 20:00 — or 2 h after the
 // reminder — until 21:30 on the user's clock, the same catch-up idea as the reminder's window: a
@@ -564,6 +594,7 @@ function cookieToken(req) {
 // The session behind a request: { user, exp, bearer } — `bearer` when it came in an Authorization
 // header (a paired phone) rather than the cookie — or null for no valid session at all.
 function sessionOf(req) {
+  if (req.service) return req.service.user ? { user: req.service.user, exp: Infinity, bearer: true, service: true } : null;
   // The paired mobile app has no cookie jar shared with the API's origin, so it carries the same
   // signed token in an Authorization header instead — same payload, same verification below.
   const auth = req.headers.authorization || '';
@@ -705,7 +736,7 @@ function json(res, code, obj, extraHeaders) {
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
-function readBody(req) {
+function readBody(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
     let size = 0, over = false; const chunks = [];
     req.on('data', d => {
@@ -717,10 +748,10 @@ function readBody(req) {
         // reset before it has parsed the answer reports a dropped connection instead of the
         // 413. A client that keeps streaming past twice the cap is not a mistaken one, and is
         // cut off.
-        if (size > 2 * MAX_BODY) req.destroy();
+        if (size > 2 * max) req.destroy();
         return;
       }
-      if (size > MAX_BODY) {
+      if (size > max) {
         over = true; chunks.length = 0;
         reject(new HttpError(413, 'body too large'));
         return;
@@ -905,6 +936,9 @@ const ACCOUNT_FAILS = createBackoff({
   keep: k => k.startsWith('acct:') && hasPassword(db.users.find(u => u.id === k.slice(5)))
 });
 setInterval(() => { AUTH_BURST.sweep(); ADDR_FAILS.sweep(); ACCOUNT_FAILS.sweep(); }, 60000).unref();
+// Food log writes per profile, whether from the app or the MCP service.
+const FOOD_WRITES = createWindow({ max: 120, windowMs: 60000 });
+setInterval(() => FOOD_WRITES.sweep(), 60000).unref();
 
 // Route -> the kind of failure it can count. Every route listed here also spends the burst
 // budget; `null` spends only that.
@@ -1865,6 +1899,7 @@ const routes = {
       // Public like the two flags above: the caps are not a secret, and the absence of the
       // block is how the app knows this server does not take photos and videos at all.
       ...(MEDIA_ON ? { media: mediaConfig(MEDIA_LIMITS) } : {}),
+      ...(readSession(req) && process.env.MCP_INTERNAL_URL && process.env.MCP_SERVICE_TOKEN_FILE ? { mcp: true } : {}),
       ...(readSession(req) ? { coach: coachConfig.publicConfig() } : {})
     });
   },
@@ -2100,7 +2135,8 @@ const routes = {
     if (!user) return json(res, 401, { error: 'not signed in' });
     const state = readStateStrict(user.id);
     if (state === UNREADABLE) { console.error('state file unreadable for', user.id); return json(res, 503, { error: 'state unreadable' }); }
-    notePull(user);
+    // An MCP read is not the person opening the app.
+    if (!req.service) notePull(user);
     json(res, 200, { state: forClient(state), rev: state?._rev || 0 });
   },
   // Just the revision: the client asks this every half minute while it is open and on every
@@ -2162,6 +2198,18 @@ const routes = {
     if ((body.baseRev != null && body.baseRev !== curRev) ||
         (body.baseRev != null && typeof body.baseWid === 'string' && cur?._wid && body.baseWid !== cur._wid)) {
       return json(res, 409, { error: 'conflict', rev: curRev, state: forClient(cur) });
+    }
+    // Food routes own these fields. Whole-state sync never receives them, and a client cannot
+    // overwrite them by including hand-crafted values in a workout push. Reset is the one clear.
+    const resetFood = (Number(body.state.resetAt) || 0) > (Number(cur?.resetAt) || 0);
+    if (resetFood) {
+      delete body.state.foodLogs;
+      delete body.state.nutritionGoals;
+    } else {
+      if (Array.isArray(cur?.foodLogs)) body.state.foodLogs = cur.foodLogs;
+      else delete body.state.foodLogs;
+      if (cur?.nutritionGoals && typeof cur.nutritionGoals === 'object') body.state.nutritionGoals = cur.nutritionGoals;
+      else delete body.state.nutritionGoals;
     }
     delete body.state.active;              // in-progress workouts stay device-local
     // "Reset everything" stamps the profile (`resetAt`, with `resetIds`: what it wiped). The stamp
@@ -2492,6 +2540,11 @@ const routes = {
   // a cycle. Every one of them is inert while the feature is unconfigured.
   ...coachRoutes({ json, readBody, readSession, requireAdmin }),
 
+  /* ---------- food log (homelab) ---------- */
+  ...foodRoutes({ json, readBody, readSession, food: FOOD, writeLimit: FOOD_WRITES }),
+  /* ---------- remote MCP account links (homelab) ---------- */
+  ...mcpLinkRoutes({ json, readBody, readSession, proveOwner, audit, db, saveDb, addressPaused, strikeAddress }),
+
   /* ---------- photos & videos ---------- */
   // Absent, not refusing, when MEDIA_UPLOADS=0: a 404 is what a server from before the feature
   // answers, and the client already treats that as "this server does not store them".
@@ -2573,8 +2626,19 @@ const server = http.createServer(async (req, res) => {
   // above stays a plain lookup, and so csrfOk and the catch-all see one name for every file.
   const mm = /^\/api\/media\/([0-9a-f]{64})$/.exec(url.pathname);
   if (mm) { key = req.method + ' /api/media/{hash}'; req.mediaHash = mm[1]; }
+  const fm = /^\/api\/food\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(url.pathname);
+  if (fm) { key = req.method + ' /api/food/{id}'; req.foodId = fm[1]; }
   const handler = routes[key];
   if (!handler) return json(res, 404, { error: 'not found' });
+  const svc = checkService(req, key, { secretDigest: SERVICE_SECRET, findUser: id => db.users.find(u => u.id === id) });
+  if (svc) {
+    if (svc.status) {
+      // Only a valid secret reaching a forbidden route is audited; bad secrets would let anyone fill the log.
+      if (svc.status === 403) audit(req, 'service.denied', { ok: false, msg: key });
+      return json(res, svc.status, { error: svc.error });
+    }
+    req.service = { user: svc.user || null };
+  }
   if (!csrfOk(req, key)) {
     // Logged, not audited: this is reachable without a session, and an audit entry per attempt
     // would let anyone fill the log. An operator who has genuinely mis-set ORIGIN needs to see
