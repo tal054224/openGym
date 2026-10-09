@@ -2034,3 +2034,59 @@ body.no-tabbar.resting #toast{bottom:calc(100px + var(--sab))}
 [dir="rtl"] .hm-wrap,[dir="rtl"] .cal-grid{direction:ltr}
 /* Tight tracking is tuned for Latin; Arabic is a connected script and gets none. */
 [dir="rtl"] *{letter-spacing:0}
+
+/* ----------------------------------------------------------- food log -- */
+.food-home-card{cursor:pointer}
+.food-home-title{gap:9px;min-width:0}
+.food-home-card .food-track{margin-top:12px}
+.food-home-macros{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;color:var(--label-2);font-size:12px}
+.food-daily-head h2,.food-list-heading h2,.food-weekly h2{margin:0}
+.food-day-nav{gap:4px}
+.food-day-nav .btn{min-height:32px;padding-inline:9px}
+.food-macro-list{display:grid;gap:11px;margin-top:14px}
+.food-macro-head{font-size:13px;color:var(--label-2)}
+.food-macro-head strong{font-weight:600;color:var(--label)}
+.food-macro-head i,.food-field i,.food-goal-field i{font-size:11px;color:var(--label-3);font-style:normal}
+.food-track{height:5px;border-radius:8px;background:var(--surface-3);overflow:hidden}
+.food-track span{display:block;height:100%;border-radius:inherit;transition:width .25s ease}
+.food-goal-row{margin-top:12px;padding-top:10px;border-top:1px solid var(--sep)}
+.food-goal-editor{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--sep)}
+.food-goal-editor .btn{grid-column:1/-1}
+.food-goal-field,.food-field{display:flex;flex-direction:column;gap:6px;min-width:0;color:var(--label-2);font-size:12px}
+.food-goal-field .num,.food-field .field,.food-field .num{width:100%;min-width:0}
+.food-goal-field .num{min-height:40px}
+.food-weekly{margin-top:4px}
+.food-week-average{display:block;text-align:end;margin-top:3px}
+.food-list-heading{margin:22px 2px 10px}
+.food-form h2{margin:0}
+.food-form{display:grid;gap:13px}
+.food-form-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.food-form .lrow{min-height:40px;padding-block:7px}
+.food-form .food-meals{--food-label-size:11px}
+.food-meals button{padding-inline:3px;font-size:var(--food-label-size)}
+.food-macro-inputs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.food-form-actions{gap:8px;margin-top:2px}
+.food-meal-group{margin-top:18px}
+.food-meal-group h3{margin:0 2px 7px;color:var(--label-2);font-size:13px;font-weight:600}
+.food-entry{display:flex;align-items:center;gap:10px;padding:11px 12px;border-bottom:1px solid var(--sep)}
+.food-entry:last-child{border-bottom:0}
+.food-entry-main{flex:1;min-width:0}
+.food-entry-title{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.food-entry-title strong{min-width:0;overflow-wrap:anywhere;color:var(--label);font-size:14px;font-weight:600}
+.food-entry-macros{display:flex;flex-wrap:wrap;gap:3px 10px;margin-top:5px;color:var(--label-3);font-size:11px}
+.food-entry-actions{gap:1px;flex:none}
+.food-error{color:var(--red)}
+.mcp-link-code{margin:10px 0;text-align:center;font-size:21px;font-weight:650;overflow-wrap:anywhere}
+.mcp-link-expiry{text-align:center;margin:-3px 0 12px}
+.mcp-app-list{margin-top:10px}
+.mcp-app-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border-bottom:1px solid var(--sep)}
+.mcp-app-row:last-child{border-bottom:0}
+.mcp-app-main{display:flex;flex:1;min-width:0;flex-direction:column;gap:2px}
+.mcp-app-main strong{overflow-wrap:anywhere;font-size:14px;font-weight:600}
+.mcp-app-row .btn{flex:none}
+@media(max-width:360px){
+  .food-day-nav{gap:0}
+  .food-day-nav .btn{padding-inline:6px;font-size:12px}
+  .food-entry{padding-inline:8px}
+  .food-entry-macros{gap:3px 6px}
+}

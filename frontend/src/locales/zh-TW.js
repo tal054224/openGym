@@ -1943,4 +1943,9 @@ export default {
   'Greys show darker in light mode, so buttons don’t look switched off.': '淺色模式下灰色會調暗一些，免得按鈕看起來像被停用了。',
   'custom color picker': '自訂顏色 自己的顏色 取色器 調色盤',
   'Signed in from another tab. Your workout came along, keep going here.': '已在另一個分頁登入。你的訓練也一起帶過去了，在這裡繼續吧。',
+  'Breakfast': '早餐', 'Lunch': '午餐', 'Dinner': '晚餐', 'Snack': '點心',
+  'Calories': '熱量', 'Protein': '蛋白質', 'Carbs': '碳水化合物', 'Fat': '脂肪',
+  'Food name': '食物名稱', 'Notes': '備註', 'Nutrition': '營養', 'Quantity': '數量', 'Unit': '單位',
+  'Connect MCP client': '連線 MCP 用戶端', 'Connected apps': '已連結的應用程式', 'Expires {0}': '於 {0} 到期',
+  'No connected apps': '沒有已連結的應用程式', 'Revoke': '撤銷存取權', 'Revoke all': '全部撤銷',
 }

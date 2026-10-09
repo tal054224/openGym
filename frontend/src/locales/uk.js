@@ -1947,4 +1947,9 @@ export default {
   'Greys show darker in light mode, so buttons don’t look switched off.': 'Сірі відтінки у світлій темі темніші, щоб кнопки не здавалися вимкненими.',
   'custom color picker': 'свій колір власний палітра вибір кольору',
   'Signed in from another tab. Your workout came along, keep going here.': 'Вхід виконано в іншій вкладці. Тренування збережено, продовжуй тут.',
+  'Breakfast': 'Сніданок', 'Lunch': 'Обід', 'Dinner': 'Вечеря', 'Snack': 'Перекус',
+  'Calories': 'Калорії', 'Protein': 'Білок', 'Carbs': 'Вуглеводи', 'Fat': 'Жири',
+  'Food name': 'Назва їжі', 'Notes': 'Нотатки', 'Nutrition': 'Харчування', 'Quantity': 'Кількість', 'Unit': 'Одиниця',
+  'Connect MCP client': 'Підключити клієнт MCP', 'Connected apps': 'Підключені програми', 'Expires {0}': 'Спливає о {0}',
+  'No connected apps': 'Немає підключених програм', 'Revoke': 'Відкликати доступ', 'Revoke all': 'Відкликати всі',
 }

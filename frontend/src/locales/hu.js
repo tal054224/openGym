@@ -1953,4 +1953,9 @@ export default {
   'Greys show darker in light mode, so buttons don’t look switched off.': 'A szürkék világos módban sötétebbek, hogy a gombok ne tűnjenek kikapcsoltnak.',
   'custom color picker': 'saját szín egyéni színválasztó',
   'Signed in from another tab. Your workout came along, keep going here.': 'Bejelentkeztél egy másik lapon. Az edzésed is jött vele, folytasd itt.',
+  'Breakfast': 'Reggeli', 'Lunch': 'Ebéd', 'Dinner': 'Vacsora', 'Snack': 'Harapnivaló',
+  'Calories': 'Kalória', 'Protein': 'Fehérje', 'Carbs': 'Szénhidrát', 'Fat': 'Zsír',
+  'Food name': 'Étel neve', 'Notes': 'Jegyzetek', 'Nutrition': 'Táplálkozás', 'Quantity': 'Mennyiség', 'Unit': 'Egység',
+  'Connect MCP client': 'MCP-kliens csatlakoztatása', 'Connected apps': 'Kapcsolt alkalmazások', 'Expires {0}': 'Lejár: {0}',
+  'No connected apps': 'Nincsenek csatlakoztatott alkalmazások', 'Revoke': 'Hozzáférés visszavonása', 'Revoke all': 'Összes visszavonása',
 }

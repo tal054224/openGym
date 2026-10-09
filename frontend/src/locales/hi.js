@@ -1950,4 +1950,9 @@ export default {
   'Greys show darker in light mode, so buttons don’t look switched off.': 'लाइट मोड में ग्रे रंग गहरे दिखते हैं, ताकि बटन बंद जैसे न लगें।',
   'custom color picker': 'अपना रंग कस्टम रंग चुनने वाला',
   'Signed in from another tab. Your workout came along, keep going here.': 'दूसरे टैब से साइन इन हुआ। आपका वर्कआउट साथ आ गया, यहीं जारी रखें।',
+  'Breakfast': 'नाश्ता', 'Lunch': 'दोपहर का भोजन', 'Dinner': 'रात का खाना', 'Snack': 'हल्का नाश्ता',
+  'Calories': 'कैलोरी', 'Protein': 'प्रोटीन', 'Carbs': 'कार्बोहाइड्रेट', 'Fat': 'वसा',
+  'Food name': 'भोजन का नाम', 'Notes': 'टिप्पणियाँ', 'Nutrition': 'पोषण', 'Quantity': 'मात्रा', 'Unit': 'इकाई',
+  'Connect MCP client': 'MCP क्लाइंट कनेक्ट करें', 'Connected apps': 'जुड़े हुए ऐप', 'Expires {0}': '{0} पर समाप्त होगा',
+  'No connected apps': 'कोई ऐप कनेक्ट नहीं है', 'Revoke': 'पहुंच रद्द करें', 'Revoke all': 'सभी की पहुंच रद्द करें',
 }

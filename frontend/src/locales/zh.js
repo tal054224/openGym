@@ -1950,4 +1950,9 @@ export default {
   'Greys show darker in light mode, so buttons don’t look switched off.': '浅色模式下灰色会调暗一些，免得按钮看起来像被停用了。',
   'custom color picker': '自定义颜色 自己的颜色 取色器 调色板',
   'Signed in from another tab. Your workout came along, keep going here.': '已在另一个标签页登录。你的训练也一起带过去了，在这里继续吧。',
+  'Breakfast': '早餐', 'Lunch': '午餐', 'Dinner': '晚餐', 'Snack': '零食',
+  'Calories': '卡路里', 'Protein': '蛋白质', 'Carbs': '碳水化合物', 'Fat': '脂肪',
+  'Food name': '食物名称', 'Notes': '备注', 'Nutrition': '营养', 'Quantity': '数量', 'Unit': '单位',
+  'Connect MCP client': '连接 MCP 客户端', 'Connected apps': '已连接的应用', 'Expires {0}': '于 {0} 过期',
+  'No connected apps': '没有已连接的应用', 'Revoke': '撤销访问', 'Revoke all': '全部撤销',
 }

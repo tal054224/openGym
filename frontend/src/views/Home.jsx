@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { effectiveRoutines, effectiveRoutineIds, nextTrainingDay, streakWeeks, lastBW, setsDoneActive } from '../lib/history.js'
@@ -14,6 +14,40 @@ import { useConnectionTrouble } from '../components/SyncBanner.jsx'
 import { Button } from '../components/ui.jsx'
 import { tappable } from '../lib/use-sheet-keyboard.js'
 import { glyphOf } from '../lib/glyphs.js'
+import { foodSummary } from '../lib/food.js'
+
+function HomeFoodCard({ user, onOpen }) {
+  const [report, setReport] = useState(null)
+  useEffect(() => {
+    if (!user) return
+    let live = true
+    const today = todayISO()
+    const fromDate = new Date(today + 'T12:00:00')
+    fromDate.setDate(fromDate.getDate() - 6)
+    const from = `${fromDate.getFullYear()}-${String(fromDate.getMonth() + 1).padStart(2, '0')}-${String(fromDate.getDate()).padStart(2, '0')}`
+    foodSummary({ from, to: today }).then(r => { if (live) setReport(r) }).catch(() => {})
+    return () => { live = false }
+  }, [user?.id])
+  if (!user) return null
+  const today = report?.days?.find(d => d.date === todayISO())
+  const calories = today?.calories || 0
+  const target = report?.goals?.calories
+  const progress = target > 0 ? Math.min(100, calories / target * 100) : 0
+  return <div className="card food-home-card">
+    <div className="row between">
+      <div className="row food-home-title"><span className="lrow-i" style={{ background: 'var(--orange)' }}><Icon name="chartLine" /></span>
+        <div><div className="lbl2">{t('Nutrition')}</div><div className="ttl">{fmtNum(calories)}{target ? ` / ${fmtNum(target)}` : ''} kcal</div></div>
+      </div>
+      <Button size="sm" variant="tinted" icon="plus" onClick={onOpen}>{t('Log')}</Button>
+    </div>
+    {target > 0 && <div className="food-track"><span style={{ width: `${progress}%`, background: calories > target ? 'var(--red)' : 'var(--orange)' }} /></div>}
+    <div className="food-home-macros">
+      <span>{t('Protein')} {fmtNum(today?.protein_g || 0)}g</span>
+      <span>{t('Carbs')} {fmtNum(today?.carbs_g || 0)}g</span>
+      <span>{t('Fat')} {fmtNum(today?.fat_g || 0)}g</span>
+    </div>
+  </div>
+}
 
 // Home = what to do now + a quick glance. Deep charts & history live in Stats.
 export default function Home() {
@@ -220,6 +254,8 @@ export default function Home() {
         ? t('No weigh-ins yet. Log your weight to start the curve.')
         : t("No weigh-ins yet. Log your weight to start the curve (we also ask before every workout).")}</div>}
     </div>}
+
+    <HomeFoodCard user={user} onOpen={() => nav('/food')} />
 
     <div className="card tappable" style={{ cursor: 'pointer' }} {...tappable(() => calendarSheet())}>
       <div className="row between">

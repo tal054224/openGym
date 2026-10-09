@@ -1950,4 +1950,9 @@ export default {
   'Greys show darker in light mode, so buttons don’t look switched off.': 'Os cinzentos ficam mais escuros no modo claro, para os botões não parecerem desligados.',
   'custom color picker': 'cor própria personalizada seletor de cor',
   'Signed in from another tab. Your workout came along, keep going here.': 'Sessão iniciada noutro separador. O teu treino veio junto, continua aqui.',
+  'Breakfast': 'Pequeno-almoço', 'Lunch': 'Almoço', 'Dinner': 'Jantar', 'Snack': 'Lanche',
+  'Calories': 'Calorias', 'Protein': 'Proteína', 'Carbs': 'Hidratos de carbono', 'Fat': 'Gordura',
+  'Food name': 'Nome do alimento', 'Notes': 'Notas', 'Nutrition': 'Nutrição', 'Quantity': 'Quantidade', 'Unit': 'Unidade',
+  'Connect MCP client': 'Ligar cliente MCP', 'Connected apps': 'Aplicações ligadas', 'Expires {0}': 'Expira às {0}',
+  'No connected apps': 'Sem aplicações ligadas', 'Revoke': 'Revogar', 'Revoke all': 'Revogar todas',
 }

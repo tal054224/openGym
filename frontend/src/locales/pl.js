@@ -1950,4 +1950,9 @@ export default {
   'Greys show darker in light mode, so buttons don’t look switched off.': 'Szarości są ciemniejsze w trybie jasnym, żeby przyciski nie wyglądały na wyłączone.',
   'custom color picker': 'własny kolor niestandardowy próbnik wybór koloru',
   'Signed in from another tab. Your workout came along, keep going here.': 'Zalogowano w innej karcie. Twój trening przeszedł razem z kontem, kontynuuj tutaj.',
+  'Breakfast': 'Śniadanie', 'Lunch': 'Obiad', 'Dinner': 'Kolacja', 'Snack': 'Przekąska',
+  'Calories': 'Kalorie', 'Protein': 'Białko', 'Carbs': 'Węglowodany', 'Fat': 'Tłuszcz',
+  'Food name': 'Nazwa produktu', 'Notes': 'Notatki', 'Nutrition': 'Odżywianie', 'Quantity': 'Ilość', 'Unit': 'Jednostka',
+  'Connect MCP client': 'Połącz klienta MCP', 'Connected apps': 'Połączone aplikacje', 'Expires {0}': 'Wygasa o {0}',
+  'No connected apps': 'Brak połączonych aplikacji', 'Revoke': 'Cofnij dostęp', 'Revoke all': 'Cofnij wszystko',
 }

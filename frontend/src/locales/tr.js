@@ -1950,4 +1950,9 @@ export default {
   'Greys show darker in light mode, so buttons don’t look switched off.': 'Griler aydınlık modda daha koyu görünür, düğmeler kapalıymış gibi durmasın diye.',
   'custom color picker': 'kendi renk özel renk seçici',
   'Signed in from another tab. Your workout came along, keep going here.': 'Başka bir sekmede giriş yapıldı. Antrenmanın da geldi, buradan devam et.',
+  'Breakfast': 'Kahvaltı', 'Lunch': 'Öğle yemeği', 'Dinner': 'Akşam yemeği', 'Snack': 'Atıştırmalık',
+  'Calories': 'Kalori', 'Protein': 'Protein', 'Carbs': 'Karbonhidrat', 'Fat': 'Yağ',
+  'Food name': 'Yiyecek adı', 'Notes': 'Notlar', 'Nutrition': 'Beslenme', 'Quantity': 'Miktar', 'Unit': 'Birim',
+  'Connect MCP client': 'MCP istemcisini bağla', 'Connected apps': 'Bağlı uygulamalar', 'Expires {0}': '{0} tarihinde sona erer',
+  'No connected apps': 'Bağlı uygulama yok', 'Revoke': 'Erişimi iptal et', 'Revoke all': 'Tümünü iptal et',
 }

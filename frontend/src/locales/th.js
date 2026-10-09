@@ -1961,4 +1961,9 @@ export default {
   'Greys show darker in light mode, so buttons don’t look switched off.': 'สีเทาจะเข้มขึ้นในโหมดสว่าง ปุ่มจะได้ไม่ดูเหมือนถูกปิดอยู่',
   'custom color picker': 'สีเอง กำหนดเอง ตัวเลือกสี',
   'Signed in from another tab. Your workout came along, keep going here.': 'ลงชื่อเข้าใช้จากแท็บอื่นแล้ว การออกกำลังกายของคุณมาด้วย ทำต่อที่นี่ได้เลย',
+  'Breakfast': 'อาหารเช้า', 'Lunch': 'อาหารกลางวัน', 'Dinner': 'อาหารเย็น', 'Snack': 'ของว่าง',
+  'Calories': 'แคลอรี', 'Protein': 'โปรตีน', 'Carbs': 'คาร์โบไฮเดรต', 'Fat': 'ไขมัน',
+  'Food name': 'ชื่ออาหาร', 'Notes': 'หมายเหตุ', 'Nutrition': 'โภชนาการ', 'Quantity': 'ปริมาณ', 'Unit': 'หน่วย',
+  'Connect MCP client': 'เชื่อมต่อไคลเอนต์ MCP', 'Connected apps': 'แอปที่เชื่อมต่อ', 'Expires {0}': 'หมดอายุเวลา {0}',
+  'No connected apps': 'ไม่มีแอปที่เชื่อมต่อ', 'Revoke': 'เพิกถอน', 'Revoke all': 'เพิกถอนทั้งหมด',
 }

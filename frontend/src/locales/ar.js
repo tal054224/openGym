@@ -2003,4 +2003,9 @@ export default {
   'Greys show darker in light mode, so buttons don’t look switched off.': 'تظهر الألوان الرمادية أغمق في الوضع الفاتح، حتى لا تبدو الأزرار مُعطّلة.',
   'custom color picker': 'لون خاص مخصص منتقي الألوان',
   'Signed in from another tab. Your workout came along, keep going here.': 'تم تسجيل الدخول من علامة تبويب أخرى. تمرينك انتقل معك، تابعه هنا.',
+  'Breakfast': 'الإفطار', 'Lunch': 'الغداء', 'Dinner': 'العشاء', 'Snack': 'وجبة خفيفة',
+  'Calories': 'السعرات الحرارية', 'Protein': 'البروتين', 'Carbs': 'الكربوهيدرات', 'Fat': 'الدهون',
+  'Food name': 'اسم الطعام', 'Notes': 'ملاحظات', 'Nutrition': 'التغذية', 'Quantity': 'الكمية', 'Unit': 'الوحدة',
+  'Connect MCP client': 'ربط عميل MCP', 'Connected apps': 'التطبيقات المتصلة', 'Expires {0}': 'ينتهي في {0}',
+  'No connected apps': 'لا توجد تطبيقات متصلة', 'Revoke': 'إلغاء الوصول', 'Revoke all': 'إلغاء الكل',
 }
