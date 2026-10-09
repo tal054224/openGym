@@ -3,6 +3,7 @@
    tool call without a restart. */
 import fs from 'node:fs'
 import path from 'node:path'
+import { requestContext } from './request-context.js'
 
 const DATA_DIR = process.env.OPENGYM_DATA || path.join(process.cwd(), 'data')
 
@@ -83,6 +84,7 @@ function ambiguousUid(ids) {
 
 // Idempotent. Picks the uid, loads db.json, attaches the watcher, primes state.
 export function init() {
+  if (process.env.MCP_MODE === 'http') throw new Error('direct profile-file access is disabled in HTTP mode')
   if (_uid !== null) return
   if (!fs.existsSync(DATA_DIR)) throw new Error(`OPENGYM_DATA dir does not exist: ${DATA_DIR}`)
   _uid = resolveUid()
@@ -114,6 +116,9 @@ export function init() {
 
 // Returns the state object, or null for a fresh account that never signed in on a device.
 export function getState() {
+  const context = requestContext()
+  if (context) return context.state || null
+  if (process.env.MCP_MODE === 'http') throw new Error('request state is unavailable')
   init()
   const file = stateFile(_uid)
   // Re-read if the file's mtime changed since our last load — covers watcher omissions and
@@ -138,6 +143,9 @@ export function getState() {
 
 // Returns the user record (id + name). No passkey material, no VAPID keys, no push subs.
 export function getUser() {
+  const context = requestContext()
+  if (context?.profileId) return { id: context.profileId, name: context.profileName || 'Profile', created: null }
+  if (process.env.MCP_MODE === 'http') throw new Error('request user is unavailable')
   init()
   const u = _db.users.find(x => x.id === _uid) || { id: _uid, name: 'Profile', created: null }
   return { id: u.id, name: u.name, created: u.created || null }
