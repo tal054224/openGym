@@ -11,6 +11,9 @@ on your phone, synced across your devices, behind your own passkey login.
 [![Online](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2Fe62jY6fwVb%3Fwith_counts%3Dtrue&query=%24.approximate_presence_count&suffix=%20online&label=&logo=discord&logoColor=white&color=3BA55C&style=for-the-badge)](https://discord.gg/e62jY6fwVb)
 [![GitHub stars](https://img.shields.io/github/stars/DuarteSantos8/openGym?style=for-the-badge&logo=github&logoColor=white&color=24292f)](https://github.com/DuarteSantos8/openGym/stargazers)
 
+<a href="https://trendshift.io/repositories/88268?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-88268" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/88268" alt="DuarteSantos8%2FopenGym | Trendshift" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/88268?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-88268" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/88268/weekly?language=JavaScript" alt="DuarteSantos8%2FopenGym | Trendshift" width="250" height="55"/></a>
+
 [![Release](https://img.shields.io/github/v/release/DuarteSantos8/openGym?style=flat-square)](https://github.com/DuarteSantos8/openGym/releases)
 [![Downloads](https://img.shields.io/github/downloads/DuarteSantos8/openGym/total?style=flat-square&label=downloads)](https://github.com/DuarteSantos8/openGym/releases)
 [![Tests](https://img.shields.io/github/actions/workflow/status/DuarteSantos8/openGym/test.yml?branch=main&label=tests&style=flat-square)](https://github.com/DuarteSantos8/openGym/actions/workflows/test.yml)
@@ -55,7 +58,7 @@ if you want to try it before installing anything.
 
 **Planning**
 
-- A routine per weekday over a library of **1,324 exercises** with animated demos, searchable and
+- A routine per weekday over a library of **over 5,600 exercises** with animated demos, searchable and
   browsable by muscle on a body map. Filter by the equipment you own.
 - Four starter plans (Push/Pull/Legs, Upper/Lower, Full Body, 5×5) that load as ordinary,
   editable routines.
@@ -86,7 +89,7 @@ if you want to try it before installing anything.
 **Progress**
 
 - Progression rules per routine or per exercise: linear, Greyskull LP, double progression through a
-  visible rep range, or adding time. Each target explains why it is that number; missed reps never
+  visible rep range, triple progression (reps, then sets, then load), or adding time. Each target explains why it is that number; missed reps never
   add load, stalls trigger a deload.
 - Estimated 1RM per exercise with its own curve, Structural Balance ratios (Poliquin, Thibaudeau,
   ATG), a year-long activity heatmap.
@@ -107,7 +110,7 @@ if you want to try it before installing anything.
   everything as one JSON file whenever you like.
 - Share a plan as a small file or print it as a PDF.
 - Optional admin dashboard with invite-only signup and an activity log.
-- 18 languages, including right-to-left Arabic and Traditional Chinese. Exercise names and
+- 19 languages, including right-to-left Arabic and Traditional Chinese. Exercise names and
   instructions are translated for most of them.
 
 **Optional extras, off by default**
@@ -132,8 +135,8 @@ docker compose pull      # prebuilt images, amd64 + arm64 (skip this to build fr
 docker compose up -d
 ```
 
-Open <http://localhost:8080>, tap **Create profile**, and you're in. The first start downloads
-the exercise media (about 140 MB) once.
+Open <http://localhost:8080>, tap **Create profile**, and you're in. The exercise animations are
+part of the image, so there's nothing else to download.
 
 To reach it from your phone with passkeys you need HTTPS on a domain; that's a two-line change in
 `.env`. The [self-hosting guide](docs/SELF_HOSTING.md) walks through Cloudflare Tunnel, Caddy,
@@ -141,10 +144,10 @@ Traefik and nginx, and there are separate guides for
 [HTTPS on a LAN](docs/SELF_HOSTING_HTTPS.md) and [Kubernetes](docs/SELF_HOSTING_KUBERNETES.md).
 
 > [!NOTE]
-> Images are published from the same tag to `registry.gitlab.com/duartesantos8/opengym/{api,web}`
-> (what `docker-compose.yml` pulls) and `ghcr.io/duartesantos8/opengym-{api,web}`. Swap the
-> `image:` lines if you prefer GHCR, or run `docker compose up -d --build` to build locally. Either
-> way you don't need Node on the host.
+> Images are published from the same tag to `ghcr.io/duartesantos8/opengym-{api,web}`
+> (what `docker-compose.yml` pulls) and `registry.gitlab.com/duartesantos8/opengym/{api,web}`. Swap
+> the `image:` lines if you prefer GitLab's registry, or run `docker compose up -d --build` to build
+> locally. Either way you don't need Node on the host.
 
 <details>
 <summary><b>Configuration reference</b> (all through <code>.env</code>)</summary>
@@ -169,6 +172,7 @@ Traefik and nginx, and there are separate guides for
 | `AUDIT_MAX` | Events kept in the activity log; `0` for no limit | `5000` |
 | `AUDIT_DAYS` | Days kept in the activity log; `0` keeps until `AUDIT_MAX` | `90` |
 | `AUDIT_IP` | Record the caller's address: `off`, `net` (network only) or `full` | `off` |
+| `ALLOWED_PRIVATE_IPS` | Private addresses push endpoints may resolve to (FakeDNS, split-horizon DNS): comma-separated IPs, `a-b` ranges or CIDR blocks | *(none)* |
 | `VAPID_SUBJECT` | Contact URL sent with push notifications | your `ORIGIN` |
 | `API_TARGET` | API image to build: `default`, or `coach` with the Claude Agent SDK and Codex CLI | `default` |
 | `COACH_DISABLED` | `1` forces the AI coach off instance-wide | *(unset)* |
@@ -197,7 +201,7 @@ Details and build instructions: [docs/MOBILE.md](docs/MOBILE.md).
 <p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/architecture-dark.png">
-  <img src="docs/diagrams/architecture.png" alt="Architecture: the phone talks HTTPS to nginx (web), which serves the app and proxies /api to the Node api; the api stores JSON in ./data. A one-shot media service downloads exercise media on first start; the AI coach and MCP server are optional." width="520">
+  <img src="docs/diagrams/architecture.png" alt="Architecture: the phone talks HTTPS to nginx (web), which serves the app and proxies /api to the Node api; the api stores JSON in ./data. The exercise media ship inside the web image; the AI coach and MCP server are optional." width="520">
 </picture>
 </p>
 
@@ -342,13 +346,10 @@ modify and share it; if you run a modified version as a network service, you hav
 version's source under the same license.
 
 > [!IMPORTANT]
-> **The exercise media is not covered by that license.** Exercise metadata and instruction text come
-> from [ExerciseDB v1](https://exercisedb.dev/) through
-> [hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset) under MIT. The
-> images and animations are third-party content under neither MIT nor the AGPL, and their ownership
-> is disputed: the dataset attributes them to [Gym visual](https://gymvisual.com/), while
-> [ExerciseDB/AscendAPI](https://exercisedb.io/faq) claims to own them. openGym doesn't redistribute
-> them (your instance downloads them on first start) and doesn't relicense them. To reuse that
-> media, clear it with the rights holder first.
+> **The exercise media is not covered by that license.** The stills and animations are
+> © Aliaksandr Makatserchyk, [Gym visual](https://gymvisual.com/), licensed for use in openGym only:
+> 180 px in this repository and on self-hosted servers, larger only inside the app packages. A
+> non-commercial fork may keep them unmodified with the notice; anything else needs your own licence
+> from gymvisual.com. The exercise text in `catalogue/` is openGym's and open to contributions.
 
 Full third-party notices, including the body-diagram geometry, are in [NOTICE.md](NOTICE.md).
