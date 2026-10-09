@@ -1,0 +1,31 @@
+# Public edge (behind the tunnel): only the MCP endpoint and its OAuth routes. Everything else is 404.
+# It holds no secrets and never reaches api or web.
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	request_body {
+		max_size 64KB
+	}
+
+	# Service auth must never be presented from outside.
+	request_header -X-OpenGym-Service-Token
+	request_header -X-OpenGym-Profile
+
+	header {
+		X-Content-Type-Options nosniff
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	@allowed path /mcp /authorize /authorize/consent /token /register /revoke /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/mcp /.well-known/oauth-authorization-server
+	handle @allowed {
+		reverse_proxy mcp:3001
+	}
+
+	handle {
+		respond 404
+	}
+}

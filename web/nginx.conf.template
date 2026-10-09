@@ -70,6 +70,9 @@ server {
         # CF_CONNECTING_IP=$http_cf_connecting_ip to let the real one through — correct only when
         # Cloudflare is genuinely in front, because that is what overwrites a client-supplied one.
         proxy_set_header CF-Connecting-IP "${CF_CONNECTING_IP}";
+        # Service auth belongs to the internal MCP service only; never forwarded from this path.
+        proxy_set_header X-OpenGym-Service-Token "";
+        proxy_set_header X-OpenGym-Profile "";
     }
 
     # Photos and videos of custom exercises (PUT and GET under api/media/). Nginx picks the
@@ -99,6 +102,8 @@ server {
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header CF-Connecting-IP "${CF_CONNECTING_IP}";
+        proxy_set_header X-OpenGym-Service-Token "";
+        proxy_set_header X-OpenGym-Profile "";
     }
 
     # The app routes behind the hash (/#/plan, /#/history …), so a path is never a screen, and the

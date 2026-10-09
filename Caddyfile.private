@@ -1,0 +1,21 @@
+# Private edge (LAN / WireGuard): the full app and API with passkeys. No MCP or OAuth routes here.
+# Certificates come from ./certs (cert.pem / key.pem for PRIVATE_HOST); nothing is fetched online.
+{
+	admin off
+	auto_https off
+}
+
+https://{$PRIVATE_HOST}:8443 {
+	tls /certs/cert.pem /certs/key.pem
+
+	request_header -X-OpenGym-Service-Token
+	request_header -X-OpenGym-Profile
+
+	header {
+		X-Content-Type-Options nosniff
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	reverse_proxy web:8080
+}

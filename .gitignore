@@ -21,3 +21,7 @@ node_modules
 junit.xml
 coverage/
 frontend/bundle-size.json
+
+# Homelab deployment secrets and certificates
+secrets/
+certs/

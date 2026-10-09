@@ -26,6 +26,17 @@ COPY frontend/ ./
 ARG APP_BUILD=""
 RUN APP_BUILD="$APP_BUILD" npm run build
 
+# Homelab fork: the same app served by the unprivileged nginx image (non-root, port 8080, works
+# with a read-only root filesystem and tmpfs for /tmp). Above the final stage so a plain build
+# still produces the upstream image.
+FROM nginxinc/nginx-unprivileged:alpine@sha256:b9241c6e7b8e9a862f129d8d4199ab64b10390949a78bdd5603379b32c844083 AS homelab
+COPY web/nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY --chmod=755 web/05-check-base-path.sh /docker-entrypoint.d/
+COPY --from=build /app/frontend/dist /usr/share/nginx/html
+ENV NGINX_PORT=8080 BACKEND=api PORT=3000 RESOLVER=127.0.0.11 CF_CONNECTING_IP="" BASE_PATH="" MEDIA_UPLOAD_MAX=48m
+HEALTHCHECK --interval=5m --timeout=5s --retries=3 \
+            CMD wget --spider -q "http://127.0.0.1:${NGINX_PORT}/" || exit 1
+
 FROM nginx:alpine
 # Same reason as in api/Dockerfile: alpine fixes land faster than the nginx image is rebuilt.
 RUN apk upgrade --no-cache

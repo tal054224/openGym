@@ -10,8 +10,7 @@ the design decisions and the test map. Work on branch `homelab`, one commit per 
 | Fact | Evidence |
 |---|---|
 | `api/Dockerfile` runs `node:22-alpine` → today **v22.23.3**, index digest `sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402` | `docker run node:22-alpine` |
-| `node:sqlite` works in that image unflagged, WAL mode OK, SQLite 3.51.3. Prints one `ExperimentalWarning`. | same run |
-| Local dev Node is v26.4.0 (node:sqlite stable there) | `node --version` |
+| Local dev Node is v26.4.0 | `node --version` |
 | `@modelcontextprotocol/sdk` latest = **1.32.1**. Ships `server/streamableHttp.js`, `server/auth/router.js` (`mcpAuthRouter`, `mcpAuthMetadataRouter`, `getOAuthProtectedResourceMetadataUrl`), `server/auth/provider.js` (`OAuthServerProvider`), handlers `authorize/token/register/revoke/metadata`, `middleware/bearerAuth.js` (`requireBearerAuth` with `expectedResource` + `resourceMetadataUrl`). All express-based; express 5 + express-rate-limit are SDK deps. | installed in `/tmp/sdkprobe` |
 | SDK v2 (`@modelcontextprotocol/server` 2.3.1 + `@modelcontextprotocol/express` 2.0.2) **dropped the authorization-server helpers** (only bearer auth, metadata router, origin/host validation remain). | export list of v2 express pkg |
 | SDK 1.32.1 authorize schema: `code_challenge_method: z.literal('S256')` (plain/missing rejected), `resource` **optional**. Token handler verifies PKCE locally. `redirectUriMatches` = exact match, except port relaxation for loopback hosts. | `handlers/authorize.js`, `handlers/token.js` |
@@ -21,10 +20,11 @@ the design decisions and the test map. Work on branch `homelab`, one commit per 
 
 ### Decisions that follow
 
-- **SQLite:** built-in `node:sqlite` (`DatabaseSync`) in both `api/` and `mcp/`. Zero new deps (the api's
-  dependency-light rule). Start node with `--disable-warning=ExperimentalWarning` (Dockerfile CMD
-  + test scripts). All SQLite access is behind one module per package, so swapping to
-  `better-sqlite3` later is a local change (near-identical sync API).
+- **Food storage:** food entries and goals are server-managed fields in each profile's existing
+  `state-<uid>.json`. No second database or dependency. The API's normal atomic state writer bumps
+  `_rev` / `_wid`; generic state sync hides those fields from clients and preserves them on every
+  workout push. The app's explicit full reset clears them. Food remains available through the
+  authenticated food routes and MCP's service-authenticated food routes.
 - **SDK:** pin `@modelcontextprotocol/sdk` **exactly `1.32.1`** (v1 is the only line with the
   OAuth AS helpers). Also pin `express` exactly to the version the SDK resolves (we import it
   directly, so declare it). zod stays `^3.25`-compatible → pin exact `3.25.x`.
@@ -64,7 +64,7 @@ and derives answers via `frontend/src/lib/*` (relative imports). No auth, no net
 
 | # | Question | Default (what the plan assumes) |
 |---|---|---|
-| D1 | stdio mode | **Keep** stdio for local use with its existing file source (upstream path unchanged). The container runs only `src/http.js`, never mounts `./data`, and in HTTP mode the file source is hard-disabled. Food tools exist only in HTTP mode (food lives in the API's SQLite). |
+| D1 | stdio mode | **Keep** stdio for local use with its existing file source (upstream path unchanged). The container runs only `src/http.js`, never mounts `./data`, and in HTTP mode the file source is hard-disabled. Food tools exist only in HTTP mode (food lives in the API's normal per-profile state document). |
 | D2 | MCP link-code generation requires fresh passkey proof (`proveOwner`) like device-link? | **Yes** — it grants data access to a third party. |
 | D3 | DCR client auth methods | Accept `none` (public + PKCE) **and** `client_secret_post`. Secrets stored as SHA-256 only (see §3.6 for how, given the SDK's plaintext compare). |
 | D4 | `resource` on refresh-token requests | Required on authorize + code exchange. On refresh: if present must equal the family's audience; if absent, the bound audience is used (compat). Flag `MCP_STRICT_RESOURCE=1` makes it mandatory everywhere. |
@@ -78,43 +78,22 @@ and derives answers via `frontend/src/lib/*` (relative imports). No auth, no net
 
 ## 3. Design
 
-### 3.1 Food storage — `api/food-db.js` (new)
+### 3.1 Food storage — `api/food-store.js` (new)
 
-- `openFoodDb(dataDir)` → `DatabaseSync(path.join(dataDir,'food.sqlite'))`; file mode 0600.
-  PRAGMAs: `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, `busy_timeout=5000`.
-- Migrations: ordered array of SQL strings; apply inside `BEGIN IMMEDIATE … COMMIT` and bump
-  `PRAGMA user_version`. Refuse to start if `user_version` > known (downgrade guard).
-- Migration 1 (`STRICT` table):
-
-```sql
-CREATE TABLE food_log (
-  id TEXT PRIMARY KEY,                 -- crypto.randomUUID()
-  profile_id TEXT NOT NULL,
-  date TEXT NOT NULL,                  -- YYYY-MM-DD (validated in JS: real calendar date)
-  time TEXT,                           -- HH:MM
-  meal TEXT NOT NULL CHECK (meal IN ('breakfast','lunch','dinner','snack')),
-  name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 120),
-  quantity REAL CHECK (quantity IS NULL OR (quantity > 0 AND quantity <= 10000)),
-  unit TEXT CHECK (unit IS NULL OR unit IN ('g','ml','piece','serving','cup','tbsp','tsp','oz')),
-  calories REAL CHECK (calories IS NULL OR (calories >= 0 AND calories <= 20000)),
-  protein_g REAL CHECK (protein_g IS NULL OR (protein_g >= 0 AND protein_g <= 2000)),
-  carbs_g REAL   CHECK (carbs_g   IS NULL OR (carbs_g   >= 0 AND carbs_g   <= 2000)),
-  fat_g REAL     CHECK (fat_g     IS NULL OR (fat_g     >= 0 AND fat_g     <= 2000)),
-  notes TEXT CHECK (notes IS NULL OR length(notes) <= 500),
-  source TEXT NOT NULL CHECK (source IN ('ui','mcp')),
-  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,   -- ISO-8601 UTC
-  version INTEGER NOT NULL DEFAULT 1,
-  idempotency_key TEXT,
-  idempotency_hash TEXT,               -- sha256 of canonical create payload
-  UNIQUE (profile_id, idempotency_key)
-) STRICT;
-CREATE INDEX food_log_by_day ON food_log (profile_id, date, time, created_at);
-```
-
-- DB constraints are the backstop; JS validation (below) is the real gate.
-- Only prepared statements, every one with `WHERE profile_id = ?`.
-- Profile deletion hook: `POST /api/admin/user/delete` also runs `DELETE FROM food_log WHERE profile_id=?`
-  (one-line hook).
+- Food records live in `foodLogs` and `nutritionGoals` inside the existing
+  `DATA_DIR/state-<uid>.json`, alongside the profile's routines and workouts. The existing profile
+  file is the app's native persistent store; no separate SQLite file, migration, or package.
+- `food-store.js` takes `readState` / `writeState` callbacks. The API's `writeFoodState` uses the
+  existing durable temp-write + fsync + rename helper, increments `_rev`, rotates `_wid` / `_wids`,
+  and invalidates the state cache. All operations are synchronous on the server event loop.
+- The food properties are server-managed: `forClient` omits them from generic `GET /api/data`, and
+  `PUT /api/data` restores them from the stored document after its revision check (or removes them
+  on an explicit `resetAt`). This keeps stale device pushes from replacing them. The web and mobile
+  food views call the authenticated food routes directly; MCP calls those same routes under
+  service auth.
+- Every stored record has a UUID, owner-by-container (`state-<uid>`), local calendar date, optional
+  time, meal/name/quantity/unit/macros/notes, `source`, created/updated timestamps, version, and
+  optional idempotency key/hash. Nutrition goals are a nullable per-profile object in the same file.
 
 ### 3.2 Food validation + routes — `api/food.js` (new) + small hooks
 
@@ -139,8 +118,8 @@ CREATE INDEX food_log_by_day ON food_log (profile_id, date, time, created_at);
 | `DELETE /api/food/{id}?version=N` | `version` optional; if given must match (409). 204 on success |
 | `GET /api/food/summary?from&to` | per-day + range totals of kcal/P/C/F and `entries`, `entries_missing_calories` |
 
-- Concurrency: `DatabaseSync` is synchronous on the single event loop and every write is one
-  statement/transaction, so optimistic versioning is exact (no lost updates).
+- Concurrency: each compare/version/mutate/write is synchronous on the Node event loop, so only one
+  same-version update can win. Durable file writes use the app's existing atomic replacement.
 - `api/openapi.yaml`: new tag `Food`, schemas `FoodLog`, `FoodLogCreate`, `FoodLogPatch`,
   `NutritionSummary`, all `additionalProperties: false`; regenerate via
   `node scripts/build-api-docs.mjs` (CI runs `--check`).
@@ -344,7 +323,8 @@ New files (upstream files touched minimally):
 
 0. `git checkout -b homelab`; `git remote add upstream https://github.com/DuarteSantos8/openGym.git`;
    commit `HOMELAB-FORK.md`, this plan, `@HOMELAB-FORK.md` line in `CLAUDE.md`.
-1. **api: food storage** — `food-db.js`, migrations, `readBody` max param. Tests: `test/food-db.test.js`.
+1. **api: food storage** — `food-store.js` in the profile state file, revision/cache handling,
+   `readBody` max param. Tests: food routes exercise the actual state file and restart persistence.
 2. **api: food routes** — `food.js`, dispatcher `{id}` regex, `foodRoutes` hook, admin-delete hook,
    openapi + regenerated docs. Tests: `test/food.test.js`, `test/food-concurrency.test.js`.
 3. **api: service auth** — `service-auth.js`, dispatcher + `sessionOf` hooks, `notePull` skip,
@@ -363,7 +343,7 @@ New files (upstream files touched minimally):
     Verify `docker compose -f docker-compose.homelab.yml up` with synthetic data.
 11. **CI** — `.github/workflows/homelab.yml`.
 12. **docs + summary** — homelab section in `mcp/README.md`; final summary for the Blue Hat review
-    (files changed, SDK/SQLite choices, registration modes, trade-offs).
+    (files changed, SDK choice, native profile-state storage, registration modes, trade-offs).
 
 ---
 
@@ -381,8 +361,6 @@ New files (upstream files touched minimally):
 
 ## 6. Security trade-offs to report
 
-- `node:sqlite` is "experimental" on Node 22 (stable on newer Node); warning suppressed, API surface
-  isolated in one module per package.
 - CIMD not implemented (SDK lacks it) — DCR only; open DCR is rate-limited, capped, https-only.
 - Behind Tailscale Funnel the client IP may be the funnel node; per-IP limits then degrade to a
   global limit — per-client and per-token limits still apply.
