@@ -13,6 +13,7 @@ COPY mcp/scripts ./scripts
 COPY frontend/src/lib /app/frontend/src/lib
 # The consent page's attempt throttle reuses the API's dependency-free backoff helper.
 COPY api/rate-limit.js /app/api/rate-limit.js
+COPY api/body-model.js /app/api/body-model.js
 RUN mkdir -p /state && chown node:node /state
 
 ENV NODE_ENV=production MCP_MODE=http PORT=3001 INTERNAL_PORT=3002 MCP_STATE_DIR=/state

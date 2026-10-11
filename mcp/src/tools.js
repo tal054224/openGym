@@ -18,6 +18,8 @@ import {
 import { loadOfWorkouts, rankOf, levelsOf } from '../../frontend/src/lib/muscles.js'
 import { policyFor } from '../../frontend/src/lib/progression.js'
 import { buildSessionEntries, startsFromLast } from '../../frontend/src/lib/session-start.js'
+import { MEASUREMENT_FIELDS, enabledMeasurementFields, measurementHistory, measurementGoalProgress, measurementUnit, toMeasurementDisplay } from '../../frontend/src/lib/measurements.js'
+import { estimateNavyBodyFat } from '../../frontend/src/lib/navy-body-fat.js'
 
 /* ---------- helpers ---------- */
 
@@ -688,8 +690,49 @@ export const previewSession = {
 
 /* ---------- registration list ---------- */
 
+export const getMeasurements = {
+  name: 'get_body_measurements',
+  description: 'Read body measurement options, goals, progress and chronological history, including US Navy waist, neck, hip and body-fat readings. Circumference values use the profile display unit; body fat is a percentage. No profile writes.',
+  schema: { from: isoDate().optional(), to: isoDate().optional(), limit: z.number().int().min(1).max(200).optional() },
+  handler: ({ from, to, limit = 100 }) => {
+    const state = getState()
+    if (!state) return noState()
+    const filtered = { ...state, measurements: (state.measurements || []).filter(entry => (!from || entry.d >= from) && entry.d <= (to || todayIso())),
+      bodyweight: (state.bodyweight || []).filter(entry => (!from || entry.d >= from) && entry.d <= (to || todayIso())) }
+    const entries = measurementHistory(filtered)
+    const fields = [...MEASUREMENT_FIELDS, ...(state.customMeasurements || []).map(field => ({ key: `other:${field.id}`, label: field.name }))]
+    const display = (key, value) => key === 'bodyFat' ? value : toMeasurementDisplay(value, state.unit)
+    return {
+      revision: Number(state._rev) || 0, weight_unit: state.unit || 'kg', weight_goal: state.targetW ?? null,
+      measurement_unit: measurementUnit(state.unit), body_fat_unit: '%',
+      options: enabledMeasurementFields(state),
+      goals: Object.fromEntries(Object.entries(state.measurementGoals || {}).map(([key, value]) => [key, display(key, value)])),
+      progress: Object.fromEntries(fields.map(field => [field.key, measurementGoalProgress(filtered, field.key)])),
+      count: entries.length, truncated: entries.length > limit,
+      entries: entries.slice(-limit).map(entry => ({ date: entry.d,
+        ...Object.fromEntries(MEASUREMENT_FIELDS.map(field => [field.key, display(field.key, entry[field.key])])),
+        other: entry.other.map(field => ({ ...field, value: toMeasurementDisplay(field.value, state.unit) })),
+      })),
+    }
+  }
+}
+
+export const calculateNavyBodyFat = {
+  name: 'calculate_navy_body_fat',
+  description: 'Calculate an estimated body-fat percentage using the US Navy circumference method, without saving measurements. Male waist is measured at the navel; female inputs require hip circumference. This is an estimate, not a medical assessment.',
+  schema: { sex: z.enum(['male', 'female']), unit: z.enum(['cm', 'in']),
+    height: z.number().finite().positive().max(300), waist: z.number().finite().positive().max(500),
+    neck: z.number().finite().positive().max(200), hip: z.number().finite().positive().max(500).optional() },
+  handler: input => {
+    const bodyFat = estimateNavyBodyFat(input)
+    if (bodyFat == null) throw Object.assign(new Error('complete valid measurements are required'), { code: 'EINVAL' })
+    return { method: 'us_navy', body_fat_percent: bodyFat, measurement_unit: input.unit }
+  }
+}
+
 export const TOOLS = [
-  listRoutines, getRoutine, previewSession, getWeekPlan, listWorkouts, getWorkout, getBodyweight, estimate1rm, muscleBalance
+  listRoutines, getRoutine, previewSession, getWeekPlan, listWorkouts, getWorkout, getBodyweight, estimate1rm, muscleBalance,
+  getMeasurements, calculateNavyBodyFat
 ]
 
 function noState() {

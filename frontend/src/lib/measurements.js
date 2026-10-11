@@ -2,6 +2,8 @@
 // Keeping one canonical unit means changing kg/lb never relabels old circumference values as
 // something they are not. The UI converts at its edge: kg profiles see cm, lb profiles see in.
 
+import { BODY_MEASUREMENT_KEYS } from '../../../api/body-model.js'
+
 export const MEASUREMENT_FIELDS = [
   { key: 'neck', label: 'Neck', group: 'Torso' },
   { key: 'shoulders', label: 'Shoulders', group: 'Torso' },
@@ -24,7 +26,7 @@ export const MEASUREMENT_FIELDS = [
   { key: 'bodyFat', label: 'Body fat', group: 'Other', kind: 'percent', optional: true },
 ]
 
-export const MEASUREMENT_KEYS = MEASUREMENT_FIELDS.map(f => f.key)
+export const MEASUREMENT_KEYS = BODY_MEASUREMENT_KEYS
 export const DEFAULT_MEASUREMENT_KEYS = MEASUREMENT_FIELDS.filter(f => !f.optional).map(f => f.key)
 
 const round = n => Math.round(n * 10) / 10
@@ -131,7 +133,7 @@ export function measurementSeries(state, key, range = 0, now = Date.now()) {
   const cutoff = range ? now - range * 86400000 : -Infinity
   const unit = state.unit || 'kg'
   const percent = key === 'bodyFat'
-  return (state.measurements || []).map(entry => {
+  return measurementHistory(state).map(entry => {
     const raw = measurementValue(entry, key)
     const at = new Date(entry.d + 'T12:00:00').getTime()
     if (raw == null || at < cutoff) return null
@@ -140,11 +142,39 @@ export function measurementSeries(state, key, range = 0, now = Date.now()) {
 }
 
 export function latestMeasurement(state, key) {
-  for (let i = (state.measurements || []).length - 1; i >= 0; i--) {
-    const value = measurementValue(state.measurements[i], key)
-    if (value != null) return { entry: state.measurements[i], value }
+  const history = measurementHistory(state)
+  for (let index = history.length - 1; index >= 0; index--) {
+    const value = measurementValue(history[index], key)
+    if (value != null) return { entry: history[index], value }
   }
   return null
+}
+
+export function measurementHistory(state) {
+  const entries = (state.bodyweight || []).filter(entry => entry.navy).map(entry => {
+    const navy = entry.navy
+    const convert = value => valid(navy.unit === 'in' ? Number(value) * 2.54 : value)
+    return normalizeMeasurementEntry({
+      d: entry.d, t: entry.t, waist: convert(navy.waist), neck: convert(navy.neck),
+      hips: navy.sex === 'female' ? convert(navy.hip) : null, bodyFat: navy.bodyFat,
+    }, state.customMeasurements)
+  })
+  return normalizeMeasurementsState({
+    customMeasurements: state.customMeasurements,
+    measurements: [...entries, ...(state.measurements || [])],
+  }).measurements
+}
+
+export function measurementGoalProgress(state, key) {
+  const goal = valid(state.measurementGoals?.[key])
+  const points = measurementSeries(state, key)
+  const target = key === 'bodyFat' ? goal : toMeasurementDisplay(goal, state.unit)
+  const start = points[0]?.y ?? null
+  const current = points.at(-1)?.y ?? null
+  const fraction = target == null || current == null || start == null ? null
+    : start === target ? (current === target ? 1 : 0)
+      : Math.max(0, Math.min(1, (current - start) / (target - start)))
+  return { goal: target, start, current, fraction }
 }
 
 export function measurementEntryHasValues(entry) {

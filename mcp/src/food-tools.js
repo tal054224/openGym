@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import { z } from 'zod'
 import { apiCall } from './api-client.js'
 import { requestContext } from './request-context.js'
+import { BODY_MEASUREMENT_KEYS } from '../../api/body-model.js'
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => {
   const [y, m, d] = v.split('-').map(Number)
@@ -35,6 +36,56 @@ const foodFields = {
 }
 
 export const FOOD_TOOLS = [
+  {
+    name: 'set_body_goals',
+    description: 'Update weight, waist, neck, hip and body-fat goals. Requires body:write and the current revision from get_body_measurements. Circumferences are centimetres; weight is in the profile weight unit. Omitted goals are retained, null clears a goal.',
+    schema: z.object({ revision: z.number().int().min(0), weight: z.number().finite().positive().max(2200).nullable().optional(),
+      waist: z.number().finite().positive().max(500).nullable().optional(), neck: z.number().finite().positive().max(500).nullable().optional(),
+      hips: z.number().finite().positive().max(500).nullable().optional(), bodyFat: z.number().finite().positive().max(100).nullable().optional() }).strict(),
+    scope: 'body:write',
+    handler: input => apiCall(profile(), '/api/body/goals', { method: 'PUT', body: input })
+  },
+  {
+    name: 'log_body_weight',
+    description: 'Log or update a weigh-in on a local date, optionally with a US Navy body-fat estimate. Weight uses the profile weight unit. Requires body:write and the current revision from get_body_measurements; a stale revision returns a conflict. Existing Navy data is retained when omitted.',
+    schema: z.object({ revision: z.number().int().min(0), date, weight: z.number().finite().positive().max(2200),
+      navy: z.object({ sex: z.enum(['male', 'female']), unit: z.enum(['cm', 'in']), height: z.number().finite().positive().max(500),
+        waist: z.number().finite().positive().max(500), neck: z.number().finite().positive().max(500), hip: z.number().finite().positive().max(500).optional() }).strict().optional() }).strict(),
+    scope: 'body:write',
+    handler: input => apiCall(profile(), '/api/body/weight', { method: 'POST', body: input })
+  },
+  {
+    name: 'log_body_measurements',
+    description: 'Log or update named body measurements for a local date. Circumferences are centimetres; bodyFat is a percentage. Omitted fields retain previous readings; null clears a field. Requires body:write and the revision from get_body_measurements.',
+    schema: z.object({ revision: z.number().int().min(0), date,
+      other: z.array(z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/), value: z.number().finite().positive().max(500).nullable() }).strict()).max(50).optional(),
+      ...Object.fromEntries(BODY_MEASUREMENT_KEYS.map(key => [key, z.number().finite().positive().max(key === 'bodyFat' ? 100 : 500).nullable().optional()])) }).strict(),
+    scope: 'body:write',
+    handler: input => apiCall(profile(), '/api/body/measurements', { method: 'POST', body: input })
+  },
+  {
+    name: 'set_body_measurement_options',
+    description: 'Choose built-in fields and optionally replace the custom measurement definitions. An empty enabled list disables built-in fields without deleting history. Custom fields need a stable id, name and enabled flag. Requires body:write and the revision from get_body_measurements.',
+    schema: z.object({ revision: z.number().int().min(0), enabled: z.array(z.enum(BODY_MEASUREMENT_KEYS)).max(BODY_MEASUREMENT_KEYS.length),
+      custom: z.array(z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/), name: z.string().trim().min(1).max(60), enabled: z.boolean() }).strict()).max(50).optional() }).strict(),
+    scope: 'body:write',
+    handler: input => apiCall(profile(), '/api/body/options', { method: 'PUT', body: input })
+  },
+  {
+    name: 'get_nutrition_goals',
+    description: 'Get the authorized profile daily calorie, protein, carbohydrate, and fat goals.',
+    schema: z.object({}).strict(),
+    scope: 'opengym:read',
+    readOnly: true,
+    handler: () => apiCall(profile(), '/api/food/goals')
+  },
+  {
+    name: 'set_nutrition_goals',
+    description: 'Replace all four daily nutrition goals for the authorized profile. Null or omitted fields clear that goal; include every goal you want to retain.',
+    schema: z.object({ calories: calorie.nullable().optional(), protein_g: macro.nullable().optional(), carbs_g: macro.nullable().optional(), fat_g: macro.nullable().optional() }).strict(),
+    scope: 'food:write',
+    handler: input => apiCall(profile(), '/api/food/goals', { method: 'PUT', body: input })
+  },
   {
     name: 'list_food_logs',
     description: 'List food entries for a local date range, oldest first. Ranges are limited to 366 days; pages contain at most 200 entries.',

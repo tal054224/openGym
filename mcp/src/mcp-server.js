@@ -9,18 +9,19 @@ const errorResult = error => ({
   content: [{ type: 'text', text: `${error.code || 'ERROR'}: ${error.message || 'request failed'}` }]
 })
 
-export function buildMcpServer(scopes = []) {
+export function buildMcpServer(scopes = [], { local = false } = {}) {
   const allowed = new Set(scopes)
   const server = new McpServer({ name: 'opengym', version: '0.2.0' })
   for (const tool of TOOLS) {
     if (!allowed.has('opengym:read')) continue
     server.registerTool(tool.name, { description: tool.description, inputSchema: tool.schema, annotations: { readOnlyHint: true } }, async params => {
-      if (!requestContext()?.scopes?.includes('opengym:read')) return errorResult(Object.assign(new Error('read scope is required'), { code: 'INSUFFICIENT_SCOPE' }))
+      if (!local && !requestContext()?.scopes?.includes('opengym:read')) return errorResult(Object.assign(new Error('read scope is required'), { code: 'INSUFFICIENT_SCOPE' }))
       try { return { content: [{ type: 'text', text: text(await tool.handler(params || {})) }] } }
       catch (error) { return errorResult(error) }
     })
   }
   for (const tool of FOOD_TOOLS) {
+    if (local) continue
     if (tool.scope && !allowed.has(tool.scope)) continue
     server.registerTool(tool.name, {
       description: tool.description, inputSchema: tool.schema,

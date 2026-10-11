@@ -65,6 +65,33 @@ For Cursor and other MCP-compatible clients, see the client's MCP docs — the s
 Restart the client; you should see the openGym tools appear with "serving profile \<name\>" on
 the server's stderr.
 
+## Homelab Tools
+
+Remote HTTP mode uses OAuth and profile-scoped API calls, never direct data-volume access.
+Local stdio remains read-only and exposes profile tools and the calculator below; food tools
+require remote HTTP mode. Body writes require the separate opt-in `body:write` permission;
+general profile, workout and routine writes remain forbidden by the API service allowlist.
+
+| Tool | Scope | Purpose |
+|---|---|---|
+| `get_body_measurements` | `opengym:read` | Enabled/custom fields, cm/in history including Navy readings, waist/neck/hip/body-fat goals and progress |
+| `calculate_navy_body_fat` | `opengym:read` | Male/female US Navy estimate in cm or inches, without saving; female inputs require hips |
+| `set_body_goals` | `body:write` | Weight, waist, neck, hip and body-fat goals; omitted values retained, null clears |
+| `log_body_weight` | `body:write` | Dated weigh-ins with optional server-calculated Navy body fat |
+| `log_body_measurements` | `body:write` | Built-in/custom measurements; cm and percent, omitted readings retained |
+| `set_body_measurement_options` | `body:write` | Enabled built-in fields and optional custom definitions without deleting history |
+| `get_nutrition_goals` | `opengym:read` | Daily calories and macronutrient goals |
+| `set_nutrition_goals` | `food:write` | Replace all four daily goals; null or omitted fields clear the corresponding goal |
+| `list_food_logs`, `get_food_log`, `get_nutrition_summary` | `opengym:read` | Food history and daily/range totals with goals |
+| `create_food_log`, `update_food_log`, `delete_food_log` | `food:write` | Profile-owned food logging; updates require a version |
+
+Navy readings are estimates, not medical assessments. Male waist measurements are taken at
+the navel. To enable remote body logging, request `opengym:read body:write` and explicitly
+check the body-write box when connecting. Existing tokens do not gain the new permission.
+Every body write requires the `revision` returned by `get_body_measurements`; a 409 requires
+a fresh read before retrying. Body goal/log circumferences use centimetres regardless of
+the profile display unit; weight uses `weight_unit`. Navy inputs accept their own cm/in unit.
+
 ## Tools
 
 Nine read-only tools in v1:

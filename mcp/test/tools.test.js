@@ -616,7 +616,7 @@ describe('get_bodyweight', () => {
       method: 'us_navy', sex: 'female', height: 165, waist: 76, neck: 33, hip: 98,
       measurement_unit: 'cm', body_fat_percent: 28.4
     })
-    expect(TOOLS.some(tool => /navy/i.test(tool.name))).toBe(false)
+    expect(TOOLS.filter(tool => /navy/i.test(tool.name)).map(tool => tool.name)).toEqual(['calculate_navy_body_fat'])
   })
 })
 
@@ -962,6 +962,10 @@ describe('shared: no-state fallback', () => {
       muscle_balance: { period: 'all' }
     }
     for (const t of TOOLS) {
+      if (t.name === 'calculate_navy_body_fat') {
+        expect(t.handler({ sex: 'male', unit: 'in', height: 72, waist: 34, neck: 16 }).body_fat_percent).toBe(14.6)
+        continue
+      }
       const r = t.handler(calls[t.name] || {})
       expect(r).toHaveProperty('error')
     }

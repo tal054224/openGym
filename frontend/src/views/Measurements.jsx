@@ -6,14 +6,14 @@ import {
   MEASUREMENT_FIELDS, MEASUREMENT_KEYS, emptyMeasurement, enabledMeasurementFields,
   fromMeasurementDisplay, latestMeasurement, measurementEntryHasValues,
   measurementSeries, measurementUnit, measurementValue, normalizeMeasurementEntry,
-  toMeasurementDisplay, normalizeMeasurementsState,
+  toMeasurementDisplay, normalizeMeasurementsState, measurementHistory, measurementGoalProgress,
 } from '../lib/measurements.js'
 import { fmtDate, fmtNum, todayISO, uid } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
 import LineChart from '../components/LineChart.jsx'
 import Icon from '../components/Icon.jsx'
 import { Button, NumberField, Section, Segmented, SelectRow, Switch, TextField } from '../components/ui.jsx'
-import { confirmSheet } from '../sheets.jsx'
+import { bwSheet, confirmSheet } from '../sheets.jsx'
 
 // Every write leaves the list in its one-entry-per-day shape (normalizeMeasurementsState).
 const update = (fn, ...rest) => useStore.getState().update(s => { fn(s); normalizeMeasurementsState(s) }, ...rest)
@@ -155,6 +155,7 @@ export default function Measurements() {
   const nav = useNavigate()
   const S = useStore(s => s.S)
   const [range, setRange] = useState(90)
+  const [goalsOpen, setGoalsOpen] = useState(false)
   const available = useMemo(() => {
     const out = enabledMeasurementFields(S)
     for (const field of MEASUREMENT_FIELDS) {
@@ -176,13 +177,21 @@ export default function Measurements() {
   const latest = all.at(-1)
   const previous = all.at(-2)
   const delta = latest && previous ? Math.round((latest.y - previous.y) * 10) / 10 : null
-  const recent = [...S.measurements].reverse()
+  const recent = measurementHistory(S).reverse()
+  const progress = key ? measurementGoalProgress(S, key) : null
 
   const remove = entry => confirmSheet({
     title: t('Delete measurements?'),
     message: t('Deletes the measurements logged on {0}.', fmtDate(entry.d, true)),
     confirmText: t('Delete'), danger: true,
-    onConfirm: () => { update(state => { state.measurements = state.measurements.filter(e => e.d !== entry.d) }); toast(t('Measurements deleted')) },
+    onConfirm: () => {
+      update(state => {
+        state.measurements = state.measurements.filter(e => e.d !== entry.d)
+        const weighIn = state.bodyweight.find(item => item.d === entry.d)
+        if (weighIn?.navy) { delete weighIn.navy; weighIn.t = Date.now() }
+      })
+      toast(t('Measurements deleted'))
+    },
   })
 
   return <div className="narrow">
@@ -199,7 +208,10 @@ export default function Measurements() {
           <div className="big" style={{ marginTop: 3 }}>{latest ? <>{fmtNum(latest.y)} <span className="muted" style={{ fontSize: '1rem' }}>{unit}</span></> : '–'}</div>
           {delta != null && delta !== 0 && <div className="small" style={{ marginTop: 3, color: 'var(--label-2)' }}>{delta > 0 ? '+' : ''}{fmtNum(delta)} {unit} {t('since previous')}</div>}
         </div>
-        <Button size="sm" icon="plus" onClick={() => measurementLogSheet()}>{t('Log')}</Button>
+        <div className="row">
+          <button className="iconbtn" onClick={() => setGoalsOpen(open => !open)} aria-label={t('Goal')} aria-expanded={goalsOpen}><Icon name="target" /></button>
+          <Button size="sm" icon="plus" onClick={() => measurementLogSheet()}>{t('Log')}</Button>
+        </div>
       </div>
       {available.length > 0 && <div className="sect-b measure-select"><SelectRow
         title={t('Measurement')} sheetTitle={t('Choose measurement')} value={key} onChange={setSelected}
@@ -207,8 +219,21 @@ export default function Measurements() {
       </div>}
       <Segmented className="seg-range" value={range} onChange={setRange}
         options={[{ value: 30, label: '1M' }, { value: 90, label: '3M' }, { value: 365, label: '1Y' }, { value: 0, label: t('All') }]} />
-      <div className="chart"><LineChart points={points} h={170} unit={unit} color="var(--teal)" /></div>
+      <div className="chart"><LineChart points={points} h={170} unit={unit} color="var(--teal)" goal={progress?.goal} /></div>
+      {progress?.goal != null && <div className="food-macro">
+        <div className="row between small"><span>{t('Goal')}</span><b>{fmtNum(progress.goal)} {unit}</b></div>
+        {progress.fraction != null && <div className="food-track"><span style={{ width: `${progress.fraction * 100}%`, background: 'var(--teal)' }} /></div>}
+      </div>}
+      {goalsOpen && <MeasurementGoals />}
     </div>
+
+    <div className="row between" style={{ margin: '14px 2px' }}>
+      <span className="small muted">{t('US Navy body-fat estimate')}</span>
+      <Button size="sm" icon="plus" onClick={() => bwSheet({ navyExpanded: true })}>{t('Log')}</Button>
+    </div>
+    {measurementHistory(S).filter(entry => entry.bodyFat != null).length > 0 && <div className="small muted" style={{ marginBottom: 12 }}>
+      {t('Body fat {0}%', fmtNum(latestMeasurement(S, 'bodyFat')?.value))}
+    </div>}
 
     {!available.length && <div className="card">
       <div className="muted small">{t('Choose the measurements you want to track, then log your first check-in.')}</div>
@@ -226,12 +251,35 @@ export default function Measurements() {
         <div className="row between">
           <div><b>{fmtDate(entry.d, true)}</b><div className="small dim" style={{ marginTop: 2 }}>{t(count === 1 ? '{0} measurement' : '{0} measurements', count)}</div></div>
           <div className="row" style={{ gap: 4 }}>
-            <button className="iconbtn" onClick={() => measurementLogSheet(entry.d)} aria-label={t('Edit')}><Icon name="pencil" /></button>
+            <button className="iconbtn" onClick={() => S.measurements.some(item => item.d === entry.d)
+              ? measurementLogSheet(entry.d) : bwSheet({ navyExpanded: true, date: entry.d })} aria-label={t('Edit')}><Icon name="pencil" /></button>
             <button className="iconbtn" style={{ color: 'var(--red)' }} onClick={() => remove(entry)} aria-label={t('Delete')}><Icon name="trash" /></button>
           </div>
         </div>
         {previewFields.length > 0 && <div className="measure-preview">{previewFields.map(({ field: f, value }) => <span key={f.key}>{t(f.label)} <b>{fmtNum(value)} {fieldUnit(f, S.unit)}</b></span>)}</div>}
       </div>
     })}</div> : <div className="empty small">{t('No measurements yet')}</div>}
+  </div>
+}
+
+function MeasurementGoals() {
+  const S = useStore(s => s.S)
+  const keys = ['waist', 'neck', 'hips', 'bodyFat']
+  const [draft, setDraft] = useState(() => Object.fromEntries(keys.map(key => [key,
+    key === 'bodyFat' ? S.measurementGoals?.[key] ?? null : toMeasurementDisplay(S.measurementGoals?.[key], S.unit),
+  ])))
+  const save = () => {
+    if (draft.bodyFat != null && draft.bodyFat > 100) { toast(t('Body fat must be between 0 and 100%.')); return }
+    update(state => { state.measurementGoals = Object.fromEntries(keys.map(key => [key,
+      key === 'bodyFat' ? draft[key] || null : fromMeasurementDisplay(draft[key] || null, S.unit),
+    ])) })
+    toast(t('Saved'))
+  }
+  return <div className="food-goal-editor">
+    {keys.map(key => <label className="food-goal-field" key={key}>
+      <span>{t(MEASUREMENT_FIELDS.find(field => field.key === key).label)} <i>{key === 'bodyFat' ? '%' : measurementUnit(S.unit)}</i></span>
+      <NumberField className="field" nullable value={draft[key]} onChange={value => setDraft(current => ({ ...current, [key]: value }))} />
+    </label>)}
+    <Button variant="primary" icon="check" onClick={save}>{t('Save')}</Button>
   </div>
 }

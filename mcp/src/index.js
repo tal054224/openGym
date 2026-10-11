@@ -6,7 +6,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { buildMcpServer } from './mcp-server.js'
 import { init, getUser } from './state.js'
 
-const server = buildMcpServer(['opengym:read'])
+const server = buildMcpServer(['opengym:read'], { local: true })
 
 // Fail fast on bad config so a misnamed OPENGYM_DATA doesn't silently answer every call with
 // the no-state sentinel. Always register every tool so the LLM sees the full list at

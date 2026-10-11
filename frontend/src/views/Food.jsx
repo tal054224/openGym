@@ -48,7 +48,7 @@ function GoalEditor({ goals, onSave, saving }) {
   return <div className="food-goal-editor">
     {MACROS.map(({ key, label, unit }) => <label className="food-goal-field" key={key}>
       <span>{label()} <i>{unit}</i></span>
-      <NumberField value={draft[key]} nullable onChange={v => setDraft(d => ({ ...d, [key]: v }))} aria-label={label()} />
+      <NumberField className="field" value={draft[key]} nullable onChange={v => setDraft(d => ({ ...d, [key]: v }))} aria-label={label()} />
     </label>)}
     <Button variant="primary" icon="check" disabled={saving} onClick={() => onSave(draft)}>{t('Save')}</Button>
   </div>
@@ -66,13 +66,13 @@ function FoodForm({ draft, setDraft, editing, onSave, onCancel, saving }) {
       <label className="food-field"><span>{t('Time')}</span><TextField type="time" value={draft.time} onChange={e => set('time')(e.target.value)} /></label>
     </div>
     <div className="food-form-pair">
-      <label className="food-field"><span>{t('Quantity')}</span><NumberField nullable value={draft.quantity} onChange={set('quantity')} /></label>
+      <label className="food-field"><span>{t('Quantity')}</span><NumberField className="field" nullable value={draft.quantity} onChange={set('quantity')} /></label>
       <div className="food-field"><span>{t('Unit')}</span><SelectRow title={t('Unit')} value={draft.unit || ''} options={units} onChange={set('unit')} /></div>
     </div>
     <div className="food-macro-inputs">
         {MACROS.map(({ key, label, unit }) => <label className="food-field" key={key}>
           <span>{label()} <i>{unit}</i></span>
-        <NumberField nullable value={draft[key]} onChange={set(key)} />
+        <NumberField className="field" nullable value={draft[key]} onChange={set(key)} />
       </label>)}
     </div>
     <label className="food-field"><span>{t('Notes')}</span><TextArea maxLength={500} rows={2} value={draft.notes} onChange={e => set('notes')(e.target.value)} /></label>

@@ -161,6 +161,10 @@ tags:
     description: >-
       Food log and daily nutrition goals (homelab fork), stored in the profile's existing
       `DATA_DIR/state-<uid>.json` document alongside workout data.
+  - name: body
+    description: >-
+      Revision-checked body weight, measurement, goal and option writes. Accepts private
+      sessions or profile-scoped MCP service auth; remote MCP requires explicit body:write consent.
   - name: mcp
     description: >-
       Remote MCP link codes and connected-client management (homelab fork). Link codes are
@@ -2203,6 +2207,88 @@ paths:
         '400': { $ref: '#/components/responses/FoodInvalid' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /api/body/goals:
+    put:
+      tags: [body]
+      operationId: setBodyGoals
+      summary: Update weight and body measurement goals
+      description: >-
+        Requires the current profile revision. Circumferences are centimetres, bodyFat is a
+        percentage, and weight uses the profile unit. Omitted goals are retained; null clears.
+        MCP calls require body:write consent. General profile, workout and routine writes remain blocked.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BodyGoalsInput' }
+      responses:
+        '200': { description: 'Stored; returns ok and the new revision.' }
+        '400': { description: 'Unknown fields or invalid values.' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: 'Stale revision; reread the profile before retrying.' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/body/weight:
+    post:
+      tags: [body]
+      operationId: logBodyWeight
+      summary: Log or update a weigh-in with optional Navy measurements
+      description: >-
+        One reading per local date, never future-dated. Weight uses the profile unit. Navy
+        measurements have their own cm/in unit and body fat is computed by the server.
+        Omitted Navy measurements retain the prior estimate. Requires the current revision.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BodyWeightInput' }
+      responses:
+        '200': { description: 'Stored; returns ok and the new revision.' }
+        '400': { description: 'Invalid date, measurement, or unknown field.' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: 'Stale revision.' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/body/measurements:
+    post:
+      tags: [body]
+      operationId: logBodyMeasurements
+      summary: Log or update named body measurements
+      description: >-
+        Circumferences are centimetres; bodyFat is a percentage. Omitted fields retain prior
+        readings, null clears. Custom ids must belong to the profile. Requires the current revision.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BodyMeasurementsInput' }
+      responses:
+        '200': { description: 'Stored; returns ok and the new revision.' }
+        '400': { description: 'Invalid or unknown measurement.' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: 'Stale revision.' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/body/options:
+    put:
+      tags: [body]
+      operationId: setBodyMeasurementOptions
+      summary: Choose enabled and custom measurement fields
+      description: >-
+        Replaces the enabled built-in field set, and optionally the custom definitions.
+        Disabling or removing a definition does not delete logged history. Requires the current revision.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BodyOptionsInput' }
+      responses:
+        '200': { description: 'Stored; returns ok and the new revision.' }
+        '400': { description: 'Invalid or duplicate custom field.' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: 'Stale revision.' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /api/food/goals:
     get:
       tags: [food]
@@ -2223,8 +2309,8 @@ paths:
       operationId: setFoodGoals
       summary: Set the daily nutrition goals
       description: >-
-        Replaces all four goals; an omitted or null field clears that goal. Session only: service
-        auth answers 403 here.
+        Replaces all four goals; an omitted or null field clears that goal. Accepts a session
+        or profile-scoped service auth from the MCP service (requires food:write at the MCP boundary).
       requestBody:
         required: true
         content:
@@ -3433,6 +3519,99 @@ components:
           example: { error: "that code is wrong, used or expired", code: "link-invalid" }
 
   schemas:
+    BodyLength:
+      type: [number, 'null']
+      exclusiveMinimum: 0
+      maximum: 500
+      description: Circumference in centimetres; null clears the reading or goal.
+    NavyMeasurements:
+      type: object
+      additionalProperties: false
+      required: [sex, unit, height, waist, neck]
+      properties:
+        sex: { type: string, enum: [male, female] }
+        unit: { type: string, enum: [cm, in] }
+        height: { type: number, exclusiveMinimum: 0, maximum: 500 }
+        waist: { type: number, exclusiveMinimum: 0, maximum: 500 }
+        neck: { type: number, exclusiveMinimum: 0, maximum: 500 }
+        hip: { type: number, exclusiveMinimum: 0, maximum: 500, description: Required for the female formula. }
+    BodyGoalsInput:
+      type: object
+      additionalProperties: false
+      required: [revision]
+      properties:
+        revision: { type: integer, minimum: 0 }
+        weight: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 2200, description: Profile unit; maximum 1000 kg or 2200 lb. }
+        waist: { $ref: '#/components/schemas/BodyLength' }
+        neck: { $ref: '#/components/schemas/BodyLength' }
+        hips: { $ref: '#/components/schemas/BodyLength' }
+        bodyFat: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 100 }
+    BodyWeightInput:
+      type: object
+      additionalProperties: false
+      required: [revision, date, weight]
+      properties:
+        revision: { type: integer, minimum: 0 }
+        date: { type: string, format: date }
+        weight: { type: number, exclusiveMinimum: 0, maximum: 2200, description: Profile unit; maximum 1000 kg or 2200 lb. }
+        navy: { $ref: '#/components/schemas/NavyMeasurements' }
+    BodyMeasurementsInput:
+      type: object
+      additionalProperties: false
+      required: [revision, date]
+      properties:
+        revision: { type: integer, minimum: 0 }
+        date: { type: string, format: date }
+        neck: { $ref: '#/components/schemas/BodyLength' }
+        shoulders: { $ref: '#/components/schemas/BodyLength' }
+        chest: { $ref: '#/components/schemas/BodyLength' }
+        waist: { $ref: '#/components/schemas/BodyLength' }
+        hips: { $ref: '#/components/schemas/BodyLength' }
+        abdomen: { $ref: '#/components/schemas/BodyLength' }
+        upperArmLeft: { $ref: '#/components/schemas/BodyLength' }
+        upperArmRight: { $ref: '#/components/schemas/BodyLength' }
+        forearmLeft: { $ref: '#/components/schemas/BodyLength' }
+        forearmRight: { $ref: '#/components/schemas/BodyLength' }
+        wristLeft: { $ref: '#/components/schemas/BodyLength' }
+        wristRight: { $ref: '#/components/schemas/BodyLength' }
+        thighLeft: { $ref: '#/components/schemas/BodyLength' }
+        thighRight: { $ref: '#/components/schemas/BodyLength' }
+        calfLeft: { $ref: '#/components/schemas/BodyLength' }
+        calfRight: { $ref: '#/components/schemas/BodyLength' }
+        ankleLeft: { $ref: '#/components/schemas/BodyLength' }
+        ankleRight: { $ref: '#/components/schemas/BodyLength' }
+        bodyFat: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 100 }
+        other:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, value]
+            properties:
+              id: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }
+              value: { $ref: '#/components/schemas/BodyLength' }
+    BodyOptionsInput:
+      type: object
+      additionalProperties: false
+      required: [revision, enabled]
+      properties:
+        revision: { type: integer, minimum: 0 }
+        enabled:
+          type: array
+          maxItems: 19
+          items: { type: string, enum: [neck, shoulders, chest, waist, hips, abdomen, upperArmLeft, upperArmRight, forearmLeft, forearmRight, wristLeft, wristRight, thighLeft, thighRight, calfLeft, calfRight, ankleLeft, ankleRight, bodyFat] }
+        custom:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name, enabled]
+            properties:
+              id: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }
+              name: { type: string, minLength: 1, maxLength: 60 }
+              enabled: { type: boolean }
     FoodLogCreate:
       type: object
       additionalProperties: false

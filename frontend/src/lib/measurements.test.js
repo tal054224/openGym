@@ -2,10 +2,29 @@ import { describe, expect, it } from 'vitest'
 import {
   MEASUREMENT_KEYS, DEFAULT_MEASUREMENT_KEYS, emptyMeasurement, enabledMeasurementFields,
   normalizeMeasurementEntry, normalizeMeasurementsState, measurementSeries,
-  toMeasurementDisplay, fromMeasurementDisplay, measurementEntryHasValues,
+  toMeasurementDisplay, fromMeasurementDisplay, measurementEntryHasValues, measurementHistory, measurementGoalProgress,
 } from './measurements.js'
 
 describe('body measurements', () => {
+  it('includes Navy logs in canonical measurement history without duplicating a day', () => {
+    const state = { unit: 'lb', bodyweight: [{ d: '2026-08-11', t: 100,
+      navy: { sex: 'male', unit: 'in', waist: 35, neck: 15, bodyFat: 20 } }],
+      measurements: [{ d: '2026-08-11', t: 200, waist: 88 }] }
+    expect(measurementHistory(state)).toHaveLength(1)
+    expect(measurementHistory(state)[0]).toMatchObject({ waist: 88, neck: 38.1, bodyFat: 20 })
+    expect(measurementSeries(state, 'neck')[0].y).toBe(15)
+    expect(state.measurements[0]).toEqual({ d: '2026-08-11', t: 200, waist: 88 })
+  })
+
+  it('tracks both increasing and decreasing goals in display units', () => {
+    const state = { unit: 'kg', measurementGoals: { waist: 80, neck: 40 }, measurements: [
+      { d: '2026-08-11', waist: 100, neck: 36 }, { d: '2026-08-12', waist: 90, neck: 38 },
+    ] }
+    expect(measurementGoalProgress(state, 'waist')).toMatchObject({ goal: 80, fraction: 0.5 })
+    expect(measurementGoalProgress(state, 'neck')).toMatchObject({ goal: 40, fraction: 0.5 })
+    expect(measurementGoalProgress(state, 'bodyFat').fraction).toBeNull()
+    expect(measurementGoalProgress({ ...state, unit: 'lb' }, 'waist').goal).toBe(31.5)
+  })
   it('creates a complete entry with nulls instead of ambiguous zeroes', () => {
     const e = emptyMeasurement('2026-08-11', [{ id: 'knee', name: 'Around knees' }])
     expect(Object.keys(e).filter(k => MEASUREMENT_KEYS.includes(k))).toEqual(MEASUREMENT_KEYS)

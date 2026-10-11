@@ -34,6 +34,7 @@ const KNEE = 'knee-1'
 const profile = () => normalizeMeasurementsState(Object.assign(clone(DEF), {
   unit: 'kg',
   measurementEnabled: ['neck', 'waist', 'chest', 'bodyFat'],
+  measurementGoals: { waist: 80, neck: 40, bodyFat: 18 },
   customMeasurements: [{ id: KNEE, name: 'Around knees', enabled: true }],
   measurements: [
     { d: '2026-06-01', t: 1780000000000, neck: 39.5, waist: 88.2, chest: 103, bodyFat: 20.1, other: [{ id: KNEE, name: 'Around knees', value: 37.4 }] },
@@ -44,6 +45,7 @@ const profile = () => normalizeMeasurementsState(Object.assign(clone(DEF), {
 
 const measurementState = S => ({
   measurements: S.measurements,
+  measurementGoals: S.measurementGoals,
   measurementEnabled: S.measurementEnabled,
   customMeasurements: S.customMeasurements
 })

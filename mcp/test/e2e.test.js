@@ -46,7 +46,7 @@ const verifier = 'v'.repeat(43)
 const challenge = crypto.createHash('sha256').update(verifier).digest('base64url')
 
 /** A complete connection for `uid`: link code → DCR → authorize → consent → token. */
-async function connect(uid, { write = true, name = 'E2E client' } = {}) {
+async function connect(uid, { write = true, bodyWrite = false, name = 'E2E client' } = {}) {
   const link = await apiCall('POST', '/api/account/mcp-link', { uid, body: { current: PASSWORD } })
   expect(link.status).toBe(200)
   const reg = await fetch(base + '/register', { method: 'POST', headers: { 'content-type': 'application/json' },
@@ -54,7 +54,7 @@ async function connect(uid, { write = true, name = 'E2E client' } = {}) {
   expect(reg.status).toBe(201)
   const client = await reg.json()
   const auth = await fetch(base + '/authorize?' + new URLSearchParams({ response_type: 'code', client_id: client.client_id, redirect_uri: REDIRECT,
-    code_challenge: challenge, code_challenge_method: 'S256', resource: base + '/mcp', scope: 'opengym:read food:write', state: 's1' }), { redirect: 'manual' })
+    code_challenge: challenge, code_challenge_method: 'S256', resource: base + '/mcp', scope: 'opengym:read food:write body:write', state: 's1' }), { redirect: 'manual' })
   expect(auth.status).toBe(200)
   const html = await auth.text()
   const id = /name="id" value="([^"]+)"/.exec(html)[1]
@@ -62,7 +62,7 @@ async function connect(uid, { write = true, name = 'E2E client' } = {}) {
   const cookie = auth.headers.get('set-cookie').split(';')[0]
   const consent = await fetch(base + '/authorize/consent', { method: 'POST', redirect: 'manual',
     headers: { origin: base, 'sec-fetch-site': 'same-origin', cookie, 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ id, csrf, link_code: link.body.code, decision: 'approve', ...(write ? { food_write: 'yes' } : {}) }) })
+    body: new URLSearchParams({ id, csrf, link_code: link.body.code, decision: 'approve', ...(write ? { food_write: 'yes' } : {}), ...(bodyWrite ? { body_write: 'yes' } : {}) }) })
   expect(consent.status).toBe(303)
   const code = new URL(consent.headers.get('location')).searchParams.get('code')
   const token = await fetch(base + '/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -121,16 +121,20 @@ describe('remote MCP end to end', () => {
     expect(foreign).toBe(403)
   })
 
-  it('runs every tool end to end, and the only write tools are the three food tools', async () => {
+  it('runs food goals, measurement reads and calculations end to end with only food writes', async () => {
     const { tokens } = await connect('u_e2e_a')
     const c = await mcp(tokens.access_token)
     const tools = (await c.listTools()).tools
     const writes = tools.filter(t => !t.annotations?.readOnlyHint).map(t => t.name).sort()
-    expect(writes).toEqual(['create_food_log', 'delete_food_log', 'update_food_log'])
+    expect(writes).toEqual(['create_food_log', 'delete_food_log', 'set_nutrition_goals', 'update_food_log'])
     expect(tools.some(t => /file|shell|fetch|raw|patch/i.test(t.name))).toBe(false)
     expect(tools.find(t => t.name === 'delete_food_log').annotations.destructiveHint).toBe(true)
 
     expect((await run(c, 'list_routines')).json.routines.map(r => r.name)).toEqual(['Push'])
+    expect((await run(c, 'set_nutrition_goals', { calories: 2200, protein_g: 120 })).json.goals.calories).toBe(2200)
+    expect((await run(c, 'get_nutrition_goals')).json.goals.protein_g).toBe(120)
+    expect((await run(c, 'get_body_measurements')).json.measurement_unit).toBe('cm')
+    expect((await run(c, 'calculate_navy_body_fat', { sex: 'female', unit: 'in', height: 65, waist: 30, neck: 13, hip: 38 })).json.body_fat_percent).toBe(28.6)
     const made = await run(c, 'create_food_log', { date: '2026-10-09', meal: 'lunch', name: 'Rice bowl', calories: 640, protein_g: 30, carbs_g: 90, fat_g: 14 })
     expect(made.json.source).toBe('mcp')
     const id = made.json.id
@@ -163,6 +167,23 @@ describe('remote MCP end to end', () => {
     await ca.close(); await cb.close()
   }, 60000)
 
+  it('requires explicit body consent and logs goals and Navy measurements with revision checks', async () => {
+    const { tokens } = await connect('u_e2e_a', { bodyWrite: true })
+    expect(tokens.scope).toContain('body:write')
+    const client = await mcp(tokens.access_token)
+    let current = (await run(client, 'get_body_measurements')).json
+    expect((await run(client, 'set_body_goals', { revision: current.revision, waist: 82, neck: 40, weight: 78 })).error).toBe(false)
+    expect((await run(client, 'set_body_goals', { revision: current.revision, waist: 81 })).error).toBe(true)
+    current = (await run(client, 'get_body_measurements')).json
+    expect((await run(client, 'log_body_weight', { revision: current.revision, date: '2026-10-10', weight: 80, navy: { sex: 'male', unit: 'in', height: 72, waist: 34, neck: 16 } })).error).toBe(false)
+    current = (await run(client, 'get_body_measurements')).json
+    expect(current.entries.at(-1).bodyFat).toBe(14.6)
+    expect((await run(client, 'log_body_measurements', { revision: current.revision, date: '2026-10-10', waist: 86, neck: 40 })).error).toBe(false)
+    current = (await run(client, 'get_body_measurements')).json
+    expect((await run(client, 'set_body_measurement_options', { revision: current.revision, enabled: ['waist', 'neck', 'bodyFat'] })).error).toBe(false)
+    await client.close()
+  }, 60000)
+
   it('a token without food:write cannot write and is not offered the write tools', async () => {
     const { tokens } = await connect('u_e2e_a', { write: false })
     expect(tokens.scope).toBe('opengym:read')
@@ -170,6 +191,9 @@ describe('remote MCP end to end', () => {
     const names = (await c.listTools()).tools.map(t => t.name)
     expect(names).toContain('list_food_logs')
     expect(names).not.toContain('create_food_log')
+    expect(names).not.toContain('set_nutrition_goals')
+    expect(names).not.toContain('log_body_weight')
+    expect((await c.callTool({ name: 'set_body_goals', arguments: { revision: 0, waist: 80 } })).isError).toBe(true)
     expect((await c.callTool({ name: 'create_food_log', arguments: { date: '2026-10-09', meal: 'lunch', name: 'x' } })).isError).toBe(true)
     await c.close()
   }, 60000)

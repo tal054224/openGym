@@ -28,7 +28,6 @@ test('non-allowlisted routes are a 403, enforced in the API', async t => {
     ['POST', '/api/logout'], ['POST', '/api/logout/all'],
     ['POST', '/api/push/subscribe', { endpoint: 'https://x' }],
     ['POST', '/api/account/device-link', {}], ['POST', '/api/pair/create', {}],
-    ['PUT', '/api/food/goals', { calories: 1 }],
     ['GET', '/api/admin/users'], ['GET', '/api/account/passkeys'], ['GET', '/api/me']
   ]) {
     const r = await s(m, p, body ? { body } : {});
@@ -55,6 +54,9 @@ test('valid service calls succeed and act as the named profile', async t => {
   assert.equal((await s('GET', '/api/food?from=2026-10-01&to=2026-10-31')).body.items.length, 1);
   assert.equal((await s('GET', '/api/food/summary?from=2026-10-01&to=2026-10-31')).status, 200);
   assert.equal((await s('GET', '/api/food/goals')).status, 200);
+  assert.equal((await s('PUT', '/api/food/goals', { body: { calories: 2200, protein_g: 120 } })).status, 200);
+  assert.equal((await s('GET', '/api/food/goals')).body.goals.calories, 2200);
+  assert.equal((await h.svc('u_food_b')('GET', '/api/food/goals')).body.goals, null);
 
   // Profile B through the service cannot see or touch A's entry.
   const b = h.svc('u_food_b');

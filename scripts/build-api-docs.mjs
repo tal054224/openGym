@@ -135,6 +135,7 @@ const TAGS = {
   // spec needs a line here.
   coach: { title: 'AI Coach', side: 'Plans, reviews, debriefs' },
   food: { title: 'Food', side: 'Food log &amp; nutrition goals' },
+  body: { title: 'Body measurements', side: 'Weight, measurements &amp; goals' },
   mcp: { title: 'Remote MCP', side: 'OAuth clients &amp; link codes' },
   admin: { title: 'Admin', side: 'Users, invites, audit log, Coach' }
 }

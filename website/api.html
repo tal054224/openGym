@@ -223,6 +223,7 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
   <a class="side-link" href="#media"><b>Media</b><span>Photos &amp; videos of your exercises &amp; workouts</span></a>
   <a class="side-link" href="#coach"><b>AI Coach</b><span>Plans, reviews, debriefs</span></a>
   <a class="side-link" href="#food"><b>Food</b><span>Food log &amp; nutrition goals</span></a>
+  <a class="side-link" href="#body"><b>Body measurements</b><span>Weight, measurements &amp; goals</span></a>
   <a class="side-link" href="#mcp"><b>Remote MCP</b><span>OAuth clients &amp; link codes</span></a>
   <a class="side-link" href="#admin"><b>Admin</b><span>Users, invites, audit log, Coach</span></a>
   <a class="side-link" href="#schemas"><b>Schemas</b><span>The state blob, the error shape &amp; co.</span></a>
@@ -247,7 +248,7 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
   <p class="api-facts">
     <span>OpenAPI 3.1.0</span>
     <span>openGym v1.4.1</span>
-    <span>82 endpoints</span>
+    <span>86 endpoints</span>
     <span>AGPL-3.0-or-later</span>
   </p>
 
@@ -2664,7 +2665,7 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
     <span class="ep-sum">Set the daily nutrition goals</span>
   </summary>
   <div class="ep-body">
-<p>Replaces all four goals; an omitted or null field clears that goal. Session only: service auth answers 403 here.</p>
+<p>Replaces all four goals; an omitted or null field clears that goal. Accepts a session or profile-scoped service auth from the MCP service (requires food:write at the MCP boundary).</p>
     <p class="ep-auth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Requires a session: the cookie set at sign-in, or <code>Authorization: Bearer &lt;token&gt;</code> from mobile-app pairing.</span></p>
 
 <p class="ep-h">Request body</p><p class="p-desc"><a href="#schema-NutritionGoalsInput">NutritionGoalsInput</a></p>
@@ -2811,6 +2812,165 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
   <div class="prow rrow">
     <span class="r-code s4">409</span>
     <span class="p-desc">The entry changed since it was read; <code>current</code> is the stored entry.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">429</span>
+    <span class="p-desc">Paused by the sign-in throttle (see <i>Throttling</i> in the description). The request was not looked at; try again after <code>Retry-After</code> seconds.<span class="r-sig"><code>{&quot;error&quot;:&quot;too many attempts, try again later&quot;}</code></span></span>
+  </div>
+    </div>
+  </div>
+</details>
+  </div>
+</section>
+
+<section class="api-sec" id="body">
+  <h2>Body measurements</h2>
+  <p class="sub">Revision-checked body weight, measurement, goal and option writes. Accepts private sessions or profile-scoped MCP service auth; remote MCP requires explicit body:write consent.</p>
+  <div class="eps">
+
+<details class="ep" id="op-setBodyGoals">
+  <summary>
+    <span class="m put">PUT</span>
+    <span class="ep-path"><code>/api/body/goals</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum">Update weight and body measurement goals</span>
+  </summary>
+  <div class="ep-body">
+<p>Requires the current profile revision. Circumferences are centimetres, bodyFat is a percentage, and weight uses the profile unit. Omitted goals are retained; null clears. MCP calls require body:write consent. General profile, workout and routine writes remain blocked.</p>
+    <p class="ep-auth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Requires a session: the cookie set at sign-in, or <code>Authorization: Bearer &lt;token&gt;</code> from mobile-app pairing.</span></p>
+
+<p class="ep-h">Request body</p><p class="p-desc"><a href="#schema-BodyGoalsInput">BodyGoalsInput</a></p>
+    <p class="ep-h">Responses</p>
+    <div class="ptab">
+  <div class="prow rrow">
+    <span class="r-code s2">200</span>
+    <span class="p-desc">Stored; returns ok and the new revision.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">400</span>
+    <span class="p-desc">Unknown fields or invalid values.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">401</span>
+    <span class="p-desc">No session, expired/revoked session, or a disabled account.<span class="r-sig"><code>{&quot;error&quot;:&quot;not signed in&quot;}</code></span></span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">409</span>
+    <span class="p-desc">Stale revision; reread the profile before retrying.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">429</span>
+    <span class="p-desc">Paused by the sign-in throttle (see <i>Throttling</i> in the description). The request was not looked at; try again after <code>Retry-After</code> seconds.<span class="r-sig"><code>{&quot;error&quot;:&quot;too many attempts, try again later&quot;}</code></span></span>
+  </div>
+    </div>
+  </div>
+</details>
+
+<details class="ep" id="op-logBodyWeight">
+  <summary>
+    <span class="m post">POST</span>
+    <span class="ep-path"><code>/api/body/weight</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum">Log or update a weigh-in with optional Navy measurements</span>
+  </summary>
+  <div class="ep-body">
+<p>One reading per local date, never future-dated. Weight uses the profile unit. Navy measurements have their own cm/in unit and body fat is computed by the server. Omitted Navy measurements retain the prior estimate. Requires the current revision.</p>
+    <p class="ep-auth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Requires a session: the cookie set at sign-in, or <code>Authorization: Bearer &lt;token&gt;</code> from mobile-app pairing.</span></p>
+
+<p class="ep-h">Request body</p><p class="p-desc"><a href="#schema-BodyWeightInput">BodyWeightInput</a></p>
+    <p class="ep-h">Responses</p>
+    <div class="ptab">
+  <div class="prow rrow">
+    <span class="r-code s2">200</span>
+    <span class="p-desc">Stored; returns ok and the new revision.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">400</span>
+    <span class="p-desc">Invalid date, measurement, or unknown field.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">401</span>
+    <span class="p-desc">No session, expired/revoked session, or a disabled account.<span class="r-sig"><code>{&quot;error&quot;:&quot;not signed in&quot;}</code></span></span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">409</span>
+    <span class="p-desc">Stale revision.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">429</span>
+    <span class="p-desc">Paused by the sign-in throttle (see <i>Throttling</i> in the description). The request was not looked at; try again after <code>Retry-After</code> seconds.<span class="r-sig"><code>{&quot;error&quot;:&quot;too many attempts, try again later&quot;}</code></span></span>
+  </div>
+    </div>
+  </div>
+</details>
+
+<details class="ep" id="op-logBodyMeasurements">
+  <summary>
+    <span class="m post">POST</span>
+    <span class="ep-path"><code>/api/body/measurements</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum">Log or update named body measurements</span>
+  </summary>
+  <div class="ep-body">
+<p>Circumferences are centimetres; bodyFat is a percentage. Omitted fields retain prior readings, null clears. Custom ids must belong to the profile. Requires the current revision.</p>
+    <p class="ep-auth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Requires a session: the cookie set at sign-in, or <code>Authorization: Bearer &lt;token&gt;</code> from mobile-app pairing.</span></p>
+
+<p class="ep-h">Request body</p><p class="p-desc"><a href="#schema-BodyMeasurementsInput">BodyMeasurementsInput</a></p>
+    <p class="ep-h">Responses</p>
+    <div class="ptab">
+  <div class="prow rrow">
+    <span class="r-code s2">200</span>
+    <span class="p-desc">Stored; returns ok and the new revision.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">400</span>
+    <span class="p-desc">Invalid or unknown measurement.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">401</span>
+    <span class="p-desc">No session, expired/revoked session, or a disabled account.<span class="r-sig"><code>{&quot;error&quot;:&quot;not signed in&quot;}</code></span></span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">409</span>
+    <span class="p-desc">Stale revision.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">429</span>
+    <span class="p-desc">Paused by the sign-in throttle (see <i>Throttling</i> in the description). The request was not looked at; try again after <code>Retry-After</code> seconds.<span class="r-sig"><code>{&quot;error&quot;:&quot;too many attempts, try again later&quot;}</code></span></span>
+  </div>
+    </div>
+  </div>
+</details>
+
+<details class="ep" id="op-setBodyMeasurementOptions">
+  <summary>
+    <span class="m put">PUT</span>
+    <span class="ep-path"><code>/api/body/options</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum">Choose enabled and custom measurement fields</span>
+  </summary>
+  <div class="ep-body">
+<p>Replaces the enabled built-in field set, and optionally the custom definitions. Disabling or removing a definition does not delete logged history. Requires the current revision.</p>
+    <p class="ep-auth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Requires a session: the cookie set at sign-in, or <code>Authorization: Bearer &lt;token&gt;</code> from mobile-app pairing.</span></p>
+
+<p class="ep-h">Request body</p><p class="p-desc"><a href="#schema-BodyOptionsInput">BodyOptionsInput</a></p>
+    <p class="ep-h">Responses</p>
+    <div class="ptab">
+  <div class="prow rrow">
+    <span class="r-code s2">200</span>
+    <span class="p-desc">Stored; returns ok and the new revision.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">400</span>
+    <span class="p-desc">Invalid or duplicate custom field.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">401</span>
+    <span class="p-desc">No session, expired/revoked session, or a disabled account.<span class="r-sig"><code>{&quot;error&quot;:&quot;not signed in&quot;}</code></span></span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">409</span>
+    <span class="p-desc">Stale revision.</span>
   </div>
   <div class="prow rrow">
     <span class="r-code s4">429</span>
@@ -3698,6 +3858,313 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
        is <b>representative, not enforced</b>: the server stores it opaquely and the app
        grows it over time.</p>
     <div class="eps">
+
+<details class="ep sch" id="schema-BodyLength">
+  <summary>
+    <span class="sch-name"><code>BodyLength</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum">Circumference in centimetres; null clears the reading or goal.</span>
+  </summary>
+  <div class="ep-body">
+
+<p class="p-desc">Free-form object.</p>
+  </div>
+</details>
+
+<details class="ep sch" id="schema-NavyMeasurements">
+  <summary>
+    <span class="sch-name"><code>NavyMeasurements</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum"></span>
+  </summary>
+  <div class="ep-body">
+
+<div class="ptab">
+  <div class="prow">
+    <span class="p-name">sex<em class="p-req" title="required">required</em></span>
+    <span class="p-type">&quot;male&quot; | &quot;female&quot;</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">unit<em class="p-req" title="required">required</em></span>
+    <span class="p-type">&quot;cm&quot; | &quot;in&quot;</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">height<em class="p-req" title="required">required</em></span>
+    <span class="p-type">number <span class="p-hint">(&ndash;500)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">waist<em class="p-req" title="required">required</em></span>
+    <span class="p-type">number <span class="p-hint">(&ndash;500)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">neck<em class="p-req" title="required">required</em></span>
+    <span class="p-type">number <span class="p-hint">(&ndash;500)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">hip</span>
+    <span class="p-type">number <span class="p-hint">(&ndash;500)</span></span>
+    <span class="p-desc">Required for the female formula.</span>
+  </div>
+</div>
+  </div>
+</details>
+
+<details class="ep sch" id="schema-BodyGoalsInput">
+  <summary>
+    <span class="sch-name"><code>BodyGoalsInput</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum"></span>
+  </summary>
+  <div class="ep-body">
+
+<div class="ptab">
+  <div class="prow">
+    <span class="p-name">revision<em class="p-req" title="required">required</em></span>
+    <span class="p-type">integer <span class="p-hint">(0&ndash;)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">weight</span>
+    <span class="p-type">number | null <span class="p-hint">(&ndash;2200)</span></span>
+    <span class="p-desc">Profile unit; maximum 1000 kg or 2200 lb.</span>
+  </div>
+  <div class="prow">
+    <span class="p-name">waist</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">neck</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">hips</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">bodyFat</span>
+    <span class="p-type">number | null <span class="p-hint">(&ndash;100)</span></span>
+    <span class="p-desc"></span>
+  </div>
+</div>
+  </div>
+</details>
+
+<details class="ep sch" id="schema-BodyWeightInput">
+  <summary>
+    <span class="sch-name"><code>BodyWeightInput</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum"></span>
+  </summary>
+  <div class="ep-body">
+
+<div class="ptab">
+  <div class="prow">
+    <span class="p-name">revision<em class="p-req" title="required">required</em></span>
+    <span class="p-type">integer <span class="p-hint">(0&ndash;)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">date<em class="p-req" title="required">required</em></span>
+    <span class="p-type">string <span class="p-hint">(date)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">weight<em class="p-req" title="required">required</em></span>
+    <span class="p-type">number <span class="p-hint">(&ndash;2200)</span></span>
+    <span class="p-desc">Profile unit; maximum 1000 kg or 2200 lb.</span>
+  </div>
+  <div class="prow">
+    <span class="p-name">navy</span>
+    <span class="p-type"><a href="#schema-NavyMeasurements">NavyMeasurements</a></span>
+    <span class="p-desc"></span>
+  </div>
+</div>
+  </div>
+</details>
+
+<details class="ep sch" id="schema-BodyMeasurementsInput">
+  <summary>
+    <span class="sch-name"><code>BodyMeasurementsInput</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum"></span>
+  </summary>
+  <div class="ep-body">
+
+<div class="ptab">
+  <div class="prow">
+    <span class="p-name">revision<em class="p-req" title="required">required</em></span>
+    <span class="p-type">integer <span class="p-hint">(0&ndash;)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">date<em class="p-req" title="required">required</em></span>
+    <span class="p-type">string <span class="p-hint">(date)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">neck</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">shoulders</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">chest</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">waist</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">hips</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">abdomen</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">upperArmLeft</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">upperArmRight</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">forearmLeft</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">forearmRight</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">wristLeft</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">wristRight</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">thighLeft</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">thighRight</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">calfLeft</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">calfRight</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">ankleLeft</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">ankleRight</span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">bodyFat</span>
+    <span class="p-type">number | null <span class="p-hint">(&ndash;100)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">other</span>
+    <span class="p-type">object[]</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">other[].id<em class="p-req" title="required">required</em></span>
+    <span class="p-type">string</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">other[].value<em class="p-req" title="required">required</em></span>
+    <span class="p-type"><a href="#schema-BodyLength">BodyLength</a></span>
+    <span class="p-desc"></span>
+  </div>
+</div>
+  </div>
+</details>
+
+<details class="ep sch" id="schema-BodyOptionsInput">
+  <summary>
+    <span class="sch-name"><code>BodyOptionsInput</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum"></span>
+  </summary>
+  <div class="ep-body">
+
+<div class="ptab">
+  <div class="prow">
+    <span class="p-name">revision<em class="p-req" title="required">required</em></span>
+    <span class="p-type">integer <span class="p-hint">(0&ndash;)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">enabled<em class="p-req" title="required">required</em></span>
+    <span class="p-type">(&quot;neck&quot; | &quot;shoulders&quot; | &quot;chest&quot; | &quot;waist&quot; | &quot;hips&quot; | &quot;abdomen&quot; | &quot;upperArmLeft&quot; | &quot;upperArmRight&quot; | &quot;forearmLeft&quot; | &quot;forearmRight&quot; | &quot;wristLeft&quot; | &quot;wristRight&quot; | &quot;thighLeft&quot; | &quot;thighRight&quot; | &quot;calfLeft&quot; | &quot;calfRight&quot; | &quot;ankleLeft&quot; | &quot;ankleRight&quot; | &quot;bodyFat&quot;)[]</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">custom</span>
+    <span class="p-type">object[]</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">custom[].id<em class="p-req" title="required">required</em></span>
+    <span class="p-type">string</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">custom[].name<em class="p-req" title="required">required</em></span>
+    <span class="p-type">string <span class="p-hint">(&le; 60 chars)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">custom[].enabled<em class="p-req" title="required">required</em></span>
+    <span class="p-type">boolean</span>
+    <span class="p-desc"></span>
+  </div>
+</div>
+  </div>
+</details>
 
 <details class="ep sch" id="schema-FoodLogCreate">
   <summary>

@@ -293,16 +293,18 @@ function WeightInput({ value, setValue, unit }) {
 }
 
 /* ============================ body weight ============================ */
-function BwSheet({ required, onDone, close }) {
+function BwSheet({ required, onDone, close, navyExpanded = false, date = todayISO() }) {
   const st = useStore(s => s.S)
   const unit = st.unit
   const bw = lastBW(st)
-  const [v, setV] = useState(bw ? bw.w : 70)
-  const todayEntry = st.bodyweight.find(b => b.d === todayISO())
-  const [navyOpen, setNavyOpen] = useState(!!todayEntry?.navy)
+  const todayEntry = st.bodyweight.find(b => b.d === date)
+  const [v, setV] = useState(todayEntry?.w ?? (bw ? bw.w : 70))
+  const lastNavy = [...st.bodyweight].reverse().find(entry => entry.d <= date && entry.navy)?.navy
+  const [navyOpen, setNavyOpen] = useState(navyExpanded || !!todayEntry?.navy)
+  const convertMeasurement = value => value == null ? '' : Math.round(value * (lastNavy?.unit === (unit === 'lb' ? 'in' : 'cm') ? 1 : unit === 'lb' ? 1 / 2.54 : 2.54) * 10) / 10
   const [navy, setNavy] = useState(() => ({
-    sex: todayEntry?.navy?.sex || 'male',
-    height: todayEntry?.navy?.height ?? '',
+    sex: todayEntry?.navy?.sex || lastNavy?.sex || 'male',
+    height: convertMeasurement(lastNavy?.height),
     waist: todayEntry?.navy?.waist ?? '',
     neck: todayEntry?.navy?.neck ?? '',
     hip: todayEntry?.navy?.hip ?? ''
@@ -313,22 +315,21 @@ function BwSheet({ required, onDone, close }) {
     const n = Math.round((v || 0) * 10) / 10
     if (!n || n <= 0) { toast(t('Enter a valid weight')); return }
     if (bwTooHeavy(n, unit)) return
-    const hasNavyValues = [navy.height, navy.waist, navy.neck, navy.hip].some(value => value !== '')
+    const hasNavyValues = navyOpen && [navy.waist, navy.neck, navy.sex === 'female' ? navy.hip : ''].some(value => value !== '' && value != null)
     if (hasNavyValues && bodyFat == null) { toast(t('Complete valid measurements for the estimate')); return }
-    const navyRecord = bodyFat == null ? null : {
+    const navyRecord = !navyOpen || bodyFat == null ? null : {
       method: 'us_navy', sex: navy.sex, height: Number(navy.height),
       waist: Number(navy.waist), neck: Number(navy.neck),
       ...(navy.sex === 'female' ? { hip: Number(navy.hip) } : {}),
       unit: measureUnit, bodyFat
     }
     update(s => {
-      const iso = todayISO()
+      const iso = date
       const ex = s.bodyweight.find(b => b.d === iso)
       if (ex) {
         ex.w = n
         ex.t = Date.now()
         if (navyRecord) ex.navy = navyRecord
-        else delete ex.navy
       } else s.bodyweight.push({ d: iso, w: n, t: Date.now(), ...(navyRecord ? { navy: navyRecord } : {}) })
       s.bodyweight.sort((a, b) => (a.d < b.d ? -1 : 1))
     })
@@ -349,7 +350,7 @@ function BwSheet({ required, onDone, close }) {
           <button className="iconbtn" aria-label={t('Cancel')} onClick={() => close()}><Icon name="xmark" /></button>
         </div>
       : <h3>{t('Log body weight')}</h3>}
-    <div className="muted small">{required ? t('Slide or tap to set your weight. We ask before every workout so your curve stays honest.') : t('Today') + ', ' + fmtDate(todayISO(), true)}</div>
+    <div className="muted small">{required ? t('Slide or tap to set your weight. We ask before every workout so your curve stays honest.') : fmtDate(date, true)}</div>
     <WeightInput value={v} setValue={setV} unit={unit} />
     {!required && <>
       <button aria-expanded={navyOpen} className="row between" style={{ width: '100%', margin: '14px 0 4px', padding: '10px 2px', borderTop: '1px solid var(--sep)', color: 'var(--text)' }} onClick={() => setNavyOpen(open => !open)}>
@@ -366,8 +367,8 @@ function BwSheet({ required, onDone, close }) {
             ['neck', t('Neck ({0})', measureUnit)], ...(navy.sex === 'female' ? [['hip', t('Hip ({0})', measureUnit)]] : [])
           ].map(([key, label]) => <label key={key} className="small muted" style={{ display: 'grid', gap: 4 }}>
             {label}
-            <input className="input" type="number" inputMode="decimal" min="0" step="0.1" value={navy[key]}
-              onChange={event => setNavy(current => ({ ...current, [key]: event.target.value }))} />
+            <NumberField className="field" nullable value={navy[key]} aria-label={label}
+              onChange={value => setNavy(current => ({ ...current, [key]: value }))} />
           </label>)}
         </div>
         {bodyFat != null && <div className="small" style={{ color: 'var(--green)' }}>{t('Body fat {0}%', fmtNum(bodyFat))}</div>}
