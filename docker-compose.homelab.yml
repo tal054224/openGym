@@ -5,6 +5,9 @@
 #   cp .env.homelab.example .env   # then edit
 #   docker compose -f docker-compose.homelab.yml up -d --build
 #
+# Pull CI-built images instead: use docker-compose.homelab.images.yml and .env.images.
+# See docs/HOMELAB_IMAGES.md; no source checkout or server-side build is needed.
+#
 # Networks: nothing public reaches api or web. `internal` has no route out; only api sits on
 # `egress` (web push needs it). mcp has no egress and never mounts ./data.
 x-hardening: &hardening

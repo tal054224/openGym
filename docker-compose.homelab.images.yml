@@ -1,0 +1,19 @@
+# Compose 2.24+; combine with docker-compose.homelab.yml to pull CI-built images only.
+# docker compose --env-file .env --env-file .env.images \
+#   -f docker-compose.homelab.yml -f docker-compose.homelab.images.yml pull
+services:
+  api:
+    build: !reset null
+    image: ${OPENGYM_API_IMAGE:?set OPENGYM_API_IMAGE from the successful CI run}
+  web:
+    build: !reset null
+    image: ${OPENGYM_WEB_IMAGE:?set OPENGYM_WEB_IMAGE from the successful CI run}
+  mcp:
+    build: !reset null
+    image: ${OPENGYM_MCP_IMAGE:?set OPENGYM_MCP_IMAGE from the successful CI run}
+  caddy-public:
+    build: !reset null
+    image: ${OPENGYM_CADDY_IMAGE:?set OPENGYM_CADDY_IMAGE from the successful CI run}
+  caddy-private:
+    build: !reset null
+    image: ${OPENGYM_CADDY_IMAGE:?set OPENGYM_CADDY_IMAGE from the successful CI run}

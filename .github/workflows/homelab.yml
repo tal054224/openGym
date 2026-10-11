@@ -1,4 +1,4 @@
-# Homelab fork: test everything, then build and push the three images tagged with the commit SHA.
+# Homelab fork: test everything, then build and push all images tagged with the commit SHA.
 # No :latest is ever published; the digests are printed so deployments can pin them.
 name: homelab
 
@@ -48,6 +48,9 @@ jobs:
       OWNER: ${{ github.repository_owner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Lowercase registry owner
+        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -61,10 +64,14 @@ jobs:
         with:
           context: ./api
           target: homelab
+          platforms: linux/amd64,linux/arm64
           push: true
           provenance: true
           sbom: true
           tags: ghcr.io/${{ env.OWNER }}/opengym-api:${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=homelab-api
+          cache-to: type=gha,mode=max,scope=homelab-api
 
       - name: Build and push web
         id: web
@@ -73,10 +80,15 @@ jobs:
           context: .
           file: web/Dockerfile
           target: homelab
+          platforms: linux/amd64,linux/arm64
           push: true
           provenance: true
           sbom: true
           tags: ghcr.io/${{ env.OWNER }}/opengym-web:${{ github.sha }}
+          build-args: APP_BUILD=${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=homelab-web
+          cache-to: type=gha,mode=max,scope=homelab-web
 
       - name: Build and push mcp
         id: mcp
@@ -84,20 +96,61 @@ jobs:
         with:
           context: .
           file: mcp/Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
           provenance: true
           sbom: true
           tags: ghcr.io/${{ env.OWNER }}/opengym-mcp:${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=homelab-mcp
+          cache-to: type=gha,mode=max,scope=homelab-mcp
+
+      - name: Build and push caddy
+        id: caddy
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./caddy
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: true
+          sbom: true
+          tags: ghcr.io/${{ env.OWNER }}/opengym-caddy:${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=homelab-caddy
+          cache-to: type=gha,mode=max,scope=homelab-caddy
 
       - name: Print image digests
         env:
           API: ${{ steps.api.outputs.digest }}
           WEB: ${{ steps.web.outputs.digest }}
           MCP: ${{ steps.mcp.outputs.digest }}
+          CADDY: ${{ steps.caddy.outputs.digest }}
         run: |
           {
             echo "### Image digests"
             echo "- ghcr.io/${OWNER}/opengym-api@${API}"
             echo "- ghcr.io/${OWNER}/opengym-web@${WEB}"
             echo "- ghcr.io/${OWNER}/opengym-mcp@${MCP}"
+            echo "- ghcr.io/${OWNER}/opengym-caddy@${CADDY}"
+            echo ""
+            echo '### Pull-only deployment (.env.images)'
+            echo '```dotenv'
+            echo "OPENGYM_API_IMAGE=ghcr.io/${OWNER}/opengym-api@${API}"
+            echo "OPENGYM_WEB_IMAGE=ghcr.io/${OWNER}/opengym-web@${WEB}"
+            echo "OPENGYM_MCP_IMAGE=ghcr.io/${OWNER}/opengym-mcp@${MCP}"
+            echo "OPENGYM_CADDY_IMAGE=ghcr.io/${OWNER}/opengym-caddy@${CADDY}"
+            echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' \
+            "OPENGYM_API_IMAGE=ghcr.io/${OWNER}/opengym-api@${API}" \
+            "OPENGYM_WEB_IMAGE=ghcr.io/${OWNER}/opengym-web@${WEB}" \
+            "OPENGYM_MCP_IMAGE=ghcr.io/${OWNER}/opengym-mcp@${MCP}" \
+            "OPENGYM_CADDY_IMAGE=ghcr.io/${OWNER}/opengym-caddy@${CADDY}" > .env.images
+
+      - name: Upload pinned image references
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: homelab-images-${{ github.sha }}
+          path: .env.images
+          include-hidden-files: true
+          if-no-files-found: error

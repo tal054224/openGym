@@ -8,6 +8,7 @@ data/
 
 # Local config
 .env
+.env.images
 
 # Build output / deps
 frontend/dist/
