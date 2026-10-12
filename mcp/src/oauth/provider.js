@@ -41,7 +41,7 @@ export function createOAuthProvider({ store, clientsStore = store, baseUrl, reso
       res.status(200).set({
         'Content-Type': 'text/html; charset=utf-8',
         'Content-Security-Policy': "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
-        'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store',
+        'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin', 'Cache-Control': 'no-store',
         'Set-Cookie': `__Host-og_consent=${encodeURIComponent(browserSecret)}; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax`
       }).send(html)
     },

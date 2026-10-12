@@ -21,7 +21,7 @@ const digestEq = (value, expected) => {
 const originOf = baseUrl => new URL(baseUrl).origin
 const cspHeaders = {
   'Content-Security-Policy': "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
-  'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store'
+  'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin', 'Cache-Control': 'no-store'
 }
 
 export function consentHtml({ pending, clientName, code = '', error = '' }) {
