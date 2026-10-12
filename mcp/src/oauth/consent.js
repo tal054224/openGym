@@ -24,6 +24,15 @@ const cspHeaders = {
   'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin', 'Cache-Control': 'no-store'
 }
 
+export function consentCsp(redirectUri) {
+  try {
+    const origin = new URL(redirectUri).origin
+    return `default-src 'none'; form-action 'self' ${origin}; frame-ancestors 'none'; base-uri 'none'`
+  } catch {
+    return "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+  }
+}
+
 export function consentHtml({ pending, clientName, code = '', error = '' }) {
   const host = new URL(pending.redirectUri).host
   const hasWrite = pending.scopes.includes('food:write')
@@ -85,7 +94,7 @@ export function mountConsentRoute(app, { store, baseUrl, issuerUrl, redeemLink, 
       ipFailures.fail(ip)
       clientFailures.fail(clientId)
       log('oauth.consent', clientId, 'link-failed')
-      return res.status(400).set(cspHeaders).type('text/html').send(consentHtml({ pending, clientName: store.clientName(clientId), code: body.csrf, error: 'The code was invalid or expired. Check it and try again.' }))
+      return res.status(400).set({ ...cspHeaders, 'Content-Security-Policy': consentCsp(pending.redirectUri) }).type('text/html').send(consentHtml({ pending, clientName: store.clientName(clientId), code: body.csrf, error: 'The code was invalid or expired. Check it and try again.' }))
     }
     const code = store.transaction(() => {
       const authorizationCode = store.issueCode({ pending, profileId })

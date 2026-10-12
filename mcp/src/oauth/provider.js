@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { AccessDeniedError, InvalidGrantError, InvalidScopeError, InvalidTargetError, InvalidTokenError, OAuthError } from '@modelcontextprotocol/sdk/server/auth/errors.js'
-import { consentHtml } from './consent.js'
+import { consentCsp, consentHtml } from './consent.js'
 
 export const READ_SCOPE = 'opengym:read'
 export const FOOD_WRITE_SCOPE = 'food:write'
@@ -40,7 +40,7 @@ export function createOAuthProvider({ store, clientsStore = store, baseUrl, reso
       const html = consentHtml({ pending, clientName: client.client_name || store.clientName(client.client_id), code: csrf })
       res.status(200).set({
         'Content-Type': 'text/html; charset=utf-8',
-        'Content-Security-Policy': "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+        'Content-Security-Policy': consentCsp(params.redirectUri),
         'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin', 'Cache-Control': 'no-store',
         'Set-Cookie': `__Host-og_consent=${encodeURIComponent(browserSecret)}; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax`
       }).send(html)
