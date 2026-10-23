@@ -118,7 +118,7 @@ export default function Food() {
   const goals = summary?.goals || null
   const points = useMemo(() => (summary?.days || []).map(d => ({ t: new Date(d.date + 'T12:00:00').getTime(), y: d.calories, d: d.date })), [summary])
   const groups = useMemo(() => groupMeals(items), [items])
-  if (!user) return <div className="narrow"><div className="hdr"><h1>{t('Nutrition')}</h1><button className="iconbtn" onClick={() => nav('/home')} aria-label={t('Home')}><Icon name="chevronLeft" /></button></div><div className="card empty">{t('Sign in')}</div></div>
+  if (!user) return <div className="narrow"><div className="hdr"><h1>{t('Nutrition')}</h1><button className="iconbtn" data-back="/home" onClick={() => nav('/home')} aria-label={t('Home')}><Icon name="chevronLeft" /></button></div><div className="card empty">{t('Sign in')}</div></div>
 
   const reload = async () => {
     const [list, report] = await Promise.all([listFood({ from: day, to: day }), foodSummary({ from: weekFrom, to: day })])
@@ -165,7 +165,7 @@ export default function Food() {
   return <div className="narrow food-page">
     <div className="hdr">
       <div><h1>{t('Nutrition')}</h1><div className="sub">{new Date(day + 'T12:00:00').toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div></div>
-      <button className="iconbtn" onClick={() => nav('/home')} aria-label={t('Home')}><Icon name="chevronLeft" /></button>
+      <button className="iconbtn" data-back="/home" onClick={() => nav('/home')} aria-label={t('Home')}><Icon name="chevronLeft" /></button>
     </div>
 
     <section className="card food-daily">
