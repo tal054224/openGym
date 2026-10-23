@@ -77,6 +77,13 @@ jobs:
           cache-dependency-path: mcp/package-lock.json
       - run: npm ci
         working-directory: mcp
+      # The end-to-end suite boots the real api/server.js as a child process. That file
+      # imports @simplewebauthn/server, web-push and undici, which resolve from
+      # api/node_modules. A job that only installs mcp/ leaves the child with
+      # ERR_MODULE_NOT_FOUND and the file fails in beforeAll. Same install as the api
+      # job: the Agent SDK is optional, and the e2e server sets COACH_DISABLED=1.
+      - run: npm ci --omit=optional
+        working-directory: api
       - run: npm test
         working-directory: mcp
       # The one check the vitest suite structurally cannot make. The MCP server is a bare node
