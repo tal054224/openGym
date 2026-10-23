@@ -6,7 +6,9 @@
 # output (static JS/CSS/HTML) is arch-independent, so there's no reason to run it under
 # QEMU — and QEMU-emulated npm installs are known to corrupt esbuild/rollup's platform-
 # specific native binaries, which is what breaks `vite build` with unrelated-looking
-# module-resolution errors.
+# module-resolution errors. The default is for `docker build` without BuildKit, which
+# leaves the automatic platform arg empty; BuildKit still supplies the real one.
+ARG BUILDPLATFORM=linux/amd64
 FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 # The frontend sits at /app/frontend, not /app: the Coach's runtime-neutral core lives in
 # api/coach/core and is imported from frontend/src as ../../../api/coach/core/*, so the two
