@@ -136,6 +136,7 @@ const TAGS = {
   coach: { title: 'AI Coach', side: 'Plans, reviews, debriefs' },
   food: { title: 'Food', side: 'Food log &amp; nutrition goals' },
   body: { title: 'Body measurements', side: 'Weight, measurements &amp; goals' },
+  routines: { title: 'Routines', side: 'Create and edit workout routines' },
   mcp: { title: 'Remote MCP', side: 'OAuth clients &amp; link codes' },
   admin: { title: 'Admin', side: 'Users, invites, audit log, Coach' }
 }

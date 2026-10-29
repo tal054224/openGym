@@ -46,7 +46,7 @@ const verifier = 'v'.repeat(43)
 const challenge = crypto.createHash('sha256').update(verifier).digest('base64url')
 
 /** A complete connection for `uid`: link code → DCR → authorize → consent → token. */
-async function connect(uid, { write = true, bodyWrite = false, name = 'E2E client' } = {}) {
+async function connect(uid, { write = true, bodyWrite = false, routineWrite = false, name = 'E2E client' } = {}) {
   const link = await apiCall('POST', '/api/account/mcp-link', { uid, body: { current: PASSWORD } })
   expect(link.status).toBe(200)
   const reg = await fetch(base + '/register', { method: 'POST', headers: { 'content-type': 'application/json' },
@@ -54,7 +54,7 @@ async function connect(uid, { write = true, bodyWrite = false, name = 'E2E clien
   expect(reg.status).toBe(201)
   const client = await reg.json()
   const auth = await fetch(base + '/authorize?' + new URLSearchParams({ response_type: 'code', client_id: client.client_id, redirect_uri: REDIRECT,
-    code_challenge: challenge, code_challenge_method: 'S256', resource: base + '/mcp', scope: 'opengym:read food:write body:write', state: 's1' }), { redirect: 'manual' })
+    code_challenge: challenge, code_challenge_method: 'S256', resource: base + '/mcp', scope: 'opengym:read food:write body:write routines:write', state: 's1' }), { redirect: 'manual' })
   expect(auth.status).toBe(200)
   const html = await auth.text()
   const id = /name="id" value="([^"]+)"/.exec(html)[1]
@@ -62,7 +62,7 @@ async function connect(uid, { write = true, bodyWrite = false, name = 'E2E clien
   const cookie = auth.headers.get('set-cookie').split(';')[0]
   const consent = await fetch(base + '/authorize/consent', { method: 'POST', redirect: 'manual',
     headers: { origin: base, 'sec-fetch-site': 'same-origin', cookie, 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ id, csrf, link_code: link.body.code, decision: 'approve', ...(write ? { food_write: 'yes' } : {}), ...(bodyWrite ? { body_write: 'yes' } : {}) }) })
+    body: new URLSearchParams({ id, csrf, link_code: link.body.code, decision: 'approve', ...(write ? { food_write: 'yes' } : {}), ...(bodyWrite ? { body_write: 'yes' } : {}), ...(routineWrite ? { routines_write: 'yes' } : {}) }) })
   expect(consent.status).toBe(303)
   const code = new URL(consent.headers.get('location')).searchParams.get('code')
   const token = await fetch(base + '/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -168,8 +168,9 @@ describe('remote MCP end to end', () => {
   }, 60000)
 
   it('requires explicit body consent and logs goals and Navy measurements with revision checks', async () => {
-    const { tokens } = await connect('u_e2e_a', { bodyWrite: true })
+    const { tokens } = await connect('u_e2e_a', { bodyWrite: true, routineWrite: true })
     expect(tokens.scope).toContain('body:write')
+    expect(tokens.scope).toContain('routines:write')
     const client = await mcp(tokens.access_token)
     let current = (await run(client, 'get_body_measurements')).json
     expect((await run(client, 'set_body_goals', { revision: current.revision, waist: 82, neck: 40, weight: 78 })).error).toBe(false)
@@ -181,6 +182,31 @@ describe('remote MCP end to end', () => {
     expect((await run(client, 'log_body_measurements', { revision: current.revision, date: '2026-10-10', waist: 86, neck: 40 })).error).toBe(false)
     current = (await run(client, 'get_body_measurements')).json
     expect((await run(client, 'set_body_measurement_options', { revision: current.revision, enabled: ['waist', 'neck', 'bodyFat'] })).error).toBe(false)
+
+    const before = await apiCall('GET', '/api/data', { uid: 'u_e2e_a' })
+    const routine = await run(client, 'get_routine', { routine_id: 'r1' })
+    const created = await run(client, 'create_routine', {
+      revision: routine.json.revision, name: 'Legs', exercises: [{ id: '0001', sets: 3, reps: 10, rest_sec: 90 }]
+    })
+    expect(created.error).toBe(false)
+    expect(created.json.routine_id).not.toBe('r1')
+    expect(created.json.exercise_ids).toEqual(['0001'])
+    expect((await run(client, 'update_routine', { routine_id: created.json.routine_id, revision: routine.json.revision, name: 'Late' })).text).toContain('CONFLICT')
+    expect((await run(client, 'update_routine', { routine_id: 'missing', revision: created.json.revision, name: 'Nope' })).text).toContain('no routine with that id')
+    expect((await run(client, 'update_routine', {
+      routine_id: created.json.routine_id, revision: created.json.revision, exercises: [{ id: 'not-a-lift', sets: 3 }]
+    })).text).toContain('not in the library')
+    const edited = await run(client, 'update_routine', {
+      routine_id: created.json.routine_id, revision: created.json.revision,
+      name: 'Legs heavy', exercises: [{ id: '0001', sets: 5 }, { id: '0007', sets: 3, reps: 12 }]
+    })
+    expect(edited.error).toBe(false)
+    expect(edited.json.routine_id).toBe(created.json.routine_id)
+    expect(edited.json.exercise_ids).toEqual(['0001', '0007'])
+    const after = await apiCall('GET', '/api/data', { uid: 'u_e2e_a' })
+    expect(after.body.state.routines.find(item => item.id === 'r1')).toMatchObject({ id: 'r1', name: 'Push', ex: [] })
+    expect(after.body.state.workouts).toEqual(before.body.state.workouts)
+    expect(after.body.state.week).toEqual(before.body.state.week)
     await client.close()
   }, 60000)
 
@@ -193,7 +219,10 @@ describe('remote MCP end to end', () => {
     expect(names).not.toContain('create_food_log')
     expect(names).not.toContain('set_nutrition_goals')
     expect(names).not.toContain('log_body_weight')
+    expect(names).not.toContain('create_routine')
+    expect(names).not.toContain('update_routine')
     expect((await c.callTool({ name: 'set_body_goals', arguments: { revision: 0, waist: 80 } })).isError).toBe(true)
+    expect((await c.callTool({ name: 'update_routine', arguments: { routine_id: 'r1', revision: 0, name: 'Nope' } })).isError).toBe(true)
     expect((await c.callTool({ name: 'create_food_log', arguments: { date: '2026-10-09', meal: 'lunch', name: 'x' } })).isError).toBe(true)
     await c.close()
   }, 60000)

@@ -68,9 +68,11 @@ the server's stderr.
 ## Homelab Tools
 
 Remote HTTP mode uses OAuth and profile-scoped API calls, never direct data-volume access.
-Local stdio remains read-only and exposes profile tools and the calculator below; food tools
-require remote HTTP mode. Body writes require the separate opt-in `body:write` permission;
-general profile, workout and routine writes remain forbidden by the API service allowlist.
+Local stdio remains read-only and exposes profile tools and the calculator below; food, body
+and routine writes require remote HTTP mode. Body writes require the separate opt-in
+`body:write` permission. Creating and editing routines requires the separate opt-in
+`routines:write` permission. Deleting a routine is not offered. General profile and workout
+writes remain forbidden by the API service allowlist.
 
 | Tool | Scope | Purpose |
 |---|---|---|
@@ -84,6 +86,8 @@ general profile, workout and routine writes remain forbidden by the API service 
 | `set_nutrition_goals` | `food:write` | Replace all four daily goals; null or omitted fields clear the corresponding goal |
 | `list_food_logs`, `get_food_log`, `get_nutrition_summary` | `opengym:read` | Food history and daily/range totals with goals |
 | `create_food_log`, `update_food_log`, `delete_food_log` | `food:write` | Profile-owned food logging; updates require a version |
+| `create_routine` | `routines:write` | Append a routine. Server assigns `routine_id`. Needs the profile `revision`. |
+| `update_routine` | `routines:write` | Edit one routine in place by `routine_id` (name, exercises, targets). Same id. Needs `revision`. |
 
 Navy readings are estimates, not medical assessments. Male waist measurements are taken at
 the navel. To enable remote body logging, request `opengym:read body:write` and explicitly
@@ -91,6 +95,13 @@ check the body-write box when connecting. Existing tokens do not gain the new pe
 Every body write requires the `revision` returned by `get_body_measurements`; a 409 requires
 a fresh read before retrying. Body goal/log circumferences use centimetres regardless of
 the profile display unit; weight uses `weight_unit`. Navy inputs accept their own cm/in unit.
+
+`create_routine` and `update_routine` use that same profile revision (`list_routines` or
+`get_routine`). A stale revision is a conflict and writes nothing. `update_routine` keeps
+`routine_id`. An exercise already in the routine keeps its id and any target the edit omits;
+the `exercises` array is the full new order. Existing tokens do not gain `routines:write`.
+Request `routines:write` and check the routine box when connecting again to use the new tools.
+Read, food and body tools keep working on a token that was issued before this scope existed.
 
 ## Tools
 

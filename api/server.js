@@ -39,6 +39,7 @@ import { excusedOn, nudgeFor, nudgeWindowOpen, toneOf } from './nudge.js';
 import { createFoodStore } from './food-store.js';
 import { foodRoutes } from './food.js';
 import { bodyRoutes } from './body.js';
+import { routineRoutes } from './routines.js';
 import { loadServiceSecret, checkService } from './service-auth.js';
 import { mcpLinkRoutes } from './mcp-links.js';
 
@@ -2901,6 +2902,9 @@ const routes = {
   /* ---------- food log (homelab) ---------- */
   ...foodRoutes({ json, readBody, readSession, food: FOOD, writeLimit: FOOD_WRITES }),
   ...bodyRoutes({ json, readBody, readSession, writeLimit: FOOD_WRITES, writeState: writeFoodState,
+    stampState: (prior, next) => stampPut(prior, next, { overRead: true }),
+    readState: uid => { const state = readStateStrict(uid); if (state === UNREADABLE) throw new Error('profile state is unreadable'); return state; } }),
+  ...routineRoutes({ json, readBody, readSession, writeLimit: FOOD_WRITES, writeState: writeFoodState,
     stampState: (prior, next) => stampPut(prior, next, { overRead: true }),
     readState: uid => { const state = readStateStrict(uid); if (state === UNREADABLE) throw new Error('profile state is unreadable'); return state; } }),
   /* ---------- remote MCP account links (homelab) ---------- */

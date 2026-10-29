@@ -42,6 +42,7 @@ test('every route the server registers is in openapi.yaml, and nothing else is',
     ...routeKeys(read(path.join(API, 'coach', 'routes.js'))),
     ...routeKeys(read(path.join(API, 'food.js'))),
     ...routeKeys(read(path.join(API, 'body.js'))),
+    ...routeKeys(read(path.join(API, 'routines.js'))),
     ...routeKeys(read(path.join(API, 'mcp-links.js')))
   ]);
   const ops = new Set(specOperations(spec));
