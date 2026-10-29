@@ -23,7 +23,7 @@ const RESERVED = new Set(['__proto__', 'constructor', 'prototype']);
 const BODYWEIGHT_EQ = new Set(['body weight', 'band', 'resistance band']);
 const CREATE_KEYS = ['revision', 'name', 'exercises'];
 const UPDATE_KEYS = ['revision', 'routine_id', 'name', 'exercises'];
-const EX_KEYS = ['id', 'mode', 'sets', 'reps', 'weight', 'pyramid', 'pyramid_rest_sec', 'pyramid_weight', 'sec', 'min', 'speed', 'rest_sec', 'superset_group', 'superset_with'];
+const EX_KEYS = ['id', 'position', 'mode', 'sets', 'reps', 'weight', 'pyramid', 'pyramid_rest_sec', 'pyramid_weight', 'sec', 'min', 'speed', 'rest_sec', 'superset_group', 'superset_with'];
 
 export class RoutineInputError extends Error {
   constructor(message, field, code, status = 400) {
@@ -211,66 +211,121 @@ function checkGroup(value, field) {
   return group;
 }
 
+function clearSuperset(exercise) {
+  delete exercise.sg;
+  delete exercise.sgName;
+  delete exercise.sgRest;
+}
+
 function applySupersets(built, incoming) {
   const at = new Map();
   built.forEach((exercise, index) => {
-    if (at.has(exercise.id)) fail('exercise is listed more than once', `exercises.${index}.id`, 'duplicate-exercise');
-    at.set(exercise.id, index);
+    const hits = at.get(exercise.id) || [];
+    hits.push(index);
+    at.set(exercise.id, hits);
   });
+  // A group the caller named on this item. An inherited `sg` whose partner was removed is not
+  // one of these: that leftover is cleared below, the way the editor's cleanupSg drops it.
+  const explicit = new Array(incoming.length).fill(null);
   incoming.forEach((raw, index) => {
-    if ('superset_group' in raw) {
-      if (raw.superset_group == null) delete built[index].sg;
-      else built[index].sg = checkGroup(raw.superset_group, `exercises.${index}.superset_group`);
-    }
+    if (!('superset_group' in raw)) return;
+    if (raw.superset_group == null) { clearSuperset(built[index]); return; }
+    built[index].sg = checkGroup(raw.superset_group, `exercises.${index}.superset_group`);
+    explicit[index] = 'superset_group';
   });
   const retarget = (from, to) => { for (const exercise of built) if (exercise.sg === from) exercise.sg = to; };
   incoming.forEach((raw, index) => {
     if (!('superset_with' in raw)) return;
-    if (raw.superset_with == null) { delete built[index].sg; return; }
+    if (raw.superset_with == null) { clearSuperset(built[index]); explicit[index] = null; return; }
     const target = raw.superset_with;
-    if (typeof target !== 'string' || !at.has(target) || target === built[index].id) {
-      fail('superset points at an exercise that is not in this routine', `exercises.${index}.superset_with`, 'bad-superset');
+    const where = `exercises.${index}.superset_with`;
+    const others = (typeof target === 'string' ? (at.get(target) || []) : []).filter(hit => hit !== index);
+    if (typeof target !== 'string' || others.length === 0) {
+      fail('superset points at an exercise that is not in this routine', where, 'bad-superset');
     }
-    const other = built[at.get(target)];
+    if (others.length > 1) fail('superset target matches more than one exercise', where, 'ambiguous-superset');
+    const other = built[others[0]];
     const group = ('superset_group' in raw && raw.superset_group) || built[index].sg || other.sg
-      || ('sg' + crypto.createHash('sha256').update([built[index].id, target].sort().join('\0')).digest('hex').slice(0, 10));
+      || ('sg' + crypto.createHash('sha256').update(`${index}\0${others[0]}`).digest('hex').slice(0, 10));
     if (built[index].sg && built[index].sg !== group) retarget(built[index].sg, group);
     if (other.sg && other.sg !== group) retarget(other.sg, group);
     built[index].sg = group;
     other.sg = group;
+    explicit[index] = explicit[index] || 'superset_with';
   });
   const counts = new Map();
   for (const exercise of built) if (exercise.sg) counts.set(exercise.sg, (counts.get(exercise.sg) || 0) + 1);
   built.forEach((exercise, index) => {
-    if (exercise.sg && counts.get(exercise.sg) < 2) {
-      fail('superset points at an exercise that is not in this routine', `exercises.${index}.superset_group`, 'bad-superset');
+    if (!exercise.sg || counts.get(exercise.sg) >= 2) return;
+    if (explicit[index]) {
+      fail('superset points at an exercise that is not in this routine', `exercises.${index}.${explicit[index]}`, 'bad-superset');
     }
+    clearSuperset(exercise);
   });
+  // The app only keeps a superset whose members sit next to each other (cleanupSg). A link
+  // with something between its members is dropped the next time the editor saves, so refuse it.
+  const groups = new Map();
+  built.forEach((exercise, index) => {
+    if (!exercise.sg) return;
+    const list = groups.get(exercise.sg) || [];
+    list.push(index);
+    groups.set(exercise.sg, list);
+  });
+  for (const indexes of groups.values()) {
+    const together = indexes.every((value, i) => i === 0 || value === indexes[i - 1] + 1);
+    if (together && indexes.length >= 2) continue;
+    const offender = indexes.find(index => explicit[index]) ?? indexes[0];
+    const key = explicit[offender] || 'superset_group';
+    fail('superset members must be next to each other', `exercises.${offender}.${key}`, 'nonadjacent-superset');
+  }
 }
 
 function buildExercises(storedList, incoming, state) {
   if (!Array.isArray(incoming) || incoming.length < 1) fail('routine must contain at least one exercise', 'exercises', 'empty-routine');
   if (incoming.length > MAX_EXERCISES) fail('too many exercises', 'exercises', 'too-many-exercises');
-  const buckets = new Map();
-  for (const exercise of Array.isArray(storedList) ? storedList : []) {
-    if (!exercise || exercise.id == null) continue;
-    const key = String(exercise.id);
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(exercise);
-  }
-  const built = incoming.map((raw, index) => {
+  const stored = Array.isArray(storedList) ? storedList : [];
+  const prepared = incoming.map((raw, index) => {
     const field = `exercises.${index}`;
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('invalid exercise', field, 'invalid-exercise');
     rejectUnknown(raw, EX_KEYS);
     const id = checkExerciseId(raw.id, `${field}.id`);
     const info = knownExercise(state, id);
     if (!info) fail('exercise is not in the library', `${field}.id`, 'not-in-library');
-    const queue = buckets.get(id);
-    const stored = queue && queue.length ? queue.shift() : null;
+    return { raw, id, info, field };
+  });
+  // The app has no per-slot id. Two copies of one exercise are two entries, told apart by
+  // their place in the list (`position` from get_routine, 1-based). A claimed position keeps
+  // that entry. An item with no position takes the next unmatched entry of the same id, in
+  // stored order, so an edit that resends the copies in order keeps each copy's own fields.
+  const used = new Set();
+  const claimed = new Array(prepared.length).fill(null);
+  prepared.forEach((item, index) => {
+    if (!('position' in item.raw) || item.raw.position == null) return;
+    const where = `${item.field}.position`;
+    if (!isInt(item.raw.position, 1, Math.max(stored.length, 1)) || item.raw.position > stored.length) {
+      fail('position does not match an exercise in this routine', where, 'bad-position');
+    }
+    const at = item.raw.position - 1;
+    if (used.has(at)) fail('position is already used by another exercise', where, 'bad-position');
+    const slot = stored[at];
+    if (!slot || slot.id !== item.id) fail('position does not match an exercise in this routine', where, 'bad-position');
+    used.add(at);
+    claimed[index] = slot;
+  });
+  const takeNext = id => {
+    for (let i = 0; i < stored.length; i++) {
+      if (used.has(i) || !stored[i] || stored[i].id !== id) continue;
+      used.add(i);
+      return stored[i];
+    }
+    return null;
+  };
+  const built = prepared.map((item, index) => {
+    const slot = claimed[index] || takeNext(item.id);
     // A copy, never the stored object: planning has to leave the document untouched until
     // the revision check has passed, and a superset link may set `sg` on a neighbour.
-    const base = stored ? { ...stored, id: stored.id } : freshExercise(id, info);
-    return applyTargets(base, raw, field, info);
+    const base = slot ? { ...slot, id: slot.id } : freshExercise(item.id, item.info);
+    return applyTargets(base, item.raw, item.field, item.info);
   });
   applySupersets(built, incoming);
   return built;

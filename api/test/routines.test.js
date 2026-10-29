@@ -64,18 +64,19 @@ test('editing a routine keeps its id and leaves the rest of the profile byte-ide
     ['PUT', { routine_id: 'push', revision: 7, exercises: [{ id: 'not-a-lift', sets: 3 }] }, 400, 'not-in-library'],
     ['PUT', { routine_id: 'push', revision: 7, exercises: [{ id: BENCH, pyramid: [12, 0, 8] }, { id: ROW }, { id: SITUP }] }, 400, 'invalid-pyramid'],
     ['PUT', { routine_id: 'push', revision: 7, exercises: [{ id: BENCH, pyramid: [12, 10, 'max'], pyramid_rest_sec: [30] }, { id: ROW }, { id: SITUP }] }, 400, 'invalid-pyramid'],
-    ['PUT', { routine_id: 'push', revision: 7, exercises: [{ id: BENCH, superset_with: 'not-in-this-routine' }, { id: ROW }, { id: SITUP }] }, 400, 'bad-superset'],
-    ['PUT', { routine_id: 'push', revision: 7, exercises: [{ id: BENCH }, { id: ROW }] }, 400, 'bad-superset'],
+    ['PUT', { routine_id: 'push', revision: 7, exercises: [{ id: BENCH, superset_with: 'not-in-this-routine' }, { id: ROW }, { id: SITUP }] }, 400, 'bad-superset', 'exercises.0.superset_with'],
+    ['PUT', { routine_id: 'push', revision: 7, exercises: [{ id: BENCH, superset_group: 'solo' }, { id: ROW }, { id: SITUP }] }, 400, 'bad-superset', 'exercises.0.superset_group'],
     ['PUT', { routine_id: 'push', revision: 6, name: 'Stale' }, 409, 'revision-conflict'],
     ['POST', { revision: 7, name: '   ', exercises: [{ id: SITUP }] }, 400, 'invalid-name'],
     ['POST', { revision: 7, name: 'Arms', exercises: [{ id: 'nope' }] }, 400, 'not-in-library'],
     ['POST', { revision: 7, name: 'Arms', exercises: [], extra: true }, 400, 'unknown-field'],
     ['POST', { revision: 7, name: 'Arms' }, 400, 'empty-routine']
   ];
-  for (const [method, body, status, code] of rejected) {
+  for (const [method, body, status, code, field] of rejected) {
     const response = await service(method, '/api/routines', { body });
     assert.equal(response.status, status, `${method} ${code} -> ${response.status} ${JSON.stringify(response.body)}`);
     assert.equal(response.body.code, code);
+    if (field) assert.equal(response.body.field, field);
     assert.deepEqual(bytes(), original, `${code} wrote the profile`);
   }
 
@@ -172,4 +173,209 @@ test('parallel routine edits cannot overwrite the same profile revision', async 
   assert.equal(JSON.stringify(saved.week), JSON.stringify(profile.week));
   assert.equal(JSON.stringify(saved.queue), JSON.stringify(profile.queue));
   assert.equal(JSON.stringify(saved.foodLogs), JSON.stringify(profile.foodLogs));
+});
+
+test('a removed superset partner is unlinked, and duplicate slots stay distinct', async t => {
+  const heavy = { id: BENCH, sets: 5, reps: 3, weight: 100, note: 'heavy', warmupSets: [{ weight: 60, reps: 3 }] };
+  const light = { id: BENCH, sets: 3, reps: 12, weight: 60, note: 'light', restSec: 75 };
+  const linked = { ...row, sgName: 'Arms', sgRest: 90 };
+  const partner = { ...situp, sgName: 'Arms', sgRest: 90 };
+  const state = {
+    ...profile,
+    routines: [
+      { id: 'push', name: 'Push', emoji: '🏋️', prog: 'linear', ex: [heavy, light, linked, partner] },
+      pull
+    ]
+  };
+  const server = await startFoodServer(t);
+  const file = path.join(server.dataDir, 'state-u_food_a.json');
+  fs.writeFileSync(file, JSON.stringify(state));
+  const service = server.svc('u_food_a');
+  const read = () => JSON.parse(fs.readFileSync(file, 'utf8'));
+  const bytes = () => fs.readFileSync(file);
+  const original = bytes();
+
+  const solo = await service('PUT', '/api/routines', { body: {
+    routine_id: 'push', revision: 7,
+    exercises: [{ id: BENCH, superset_with: BENCH }, { id: BENCH }, { id: BENCH }]
+  } });
+  assert.equal(solo.status, 400);
+  assert.equal(solo.body.code, 'ambiguous-superset');
+  assert.equal(solo.body.field, 'exercises.0.superset_with');
+  assert.deepEqual(bytes(), original);
+
+  const badSlot = await service('PUT', '/api/routines', { body: {
+    routine_id: 'push', revision: 7,
+    exercises: [{ id: BENCH, position: 2 }, { id: BENCH, position: 2 }]
+  } });
+  assert.equal(badSlot.status, 400);
+  assert.equal(badSlot.body.code, 'bad-position');
+  assert.equal(badSlot.body.field, 'exercises.1.position');
+  assert.deepEqual(bytes(), original);
+
+  const edited = await service('PUT', '/api/routines', { body: {
+    routine_id: 'push', revision: 7,
+    exercises: [
+      { id: BENCH, sets: 6 },
+      { id: BENCH },
+      { id: ROW }
+    ]
+  } });
+  assert.equal(edited.status, 200);
+  assert.deepEqual(edited.body.exercise_ids, [BENCH, BENCH, ROW]);
+  const saved = read();
+  assert.equal(saved.routines[0].id, 'push');
+  assert.equal(saved.routines[0].ex[0].id, BENCH);
+  assert.equal(saved.routines[0].ex[0].sets, 6);
+  assert.equal(saved.routines[0].ex[0].reps, 3);
+  assert.equal(saved.routines[0].ex[0].note, 'heavy');
+  assert.deepEqual(saved.routines[0].ex[0].warmupSets, heavy.warmupSets);
+  assert.equal(JSON.stringify(saved.routines[0].ex[1]), JSON.stringify(light));
+  assert.equal(saved.routines[0].ex[2].sg, undefined);
+  assert.equal(saved.routines[0].ex[2].sets, linked.sets);
+  assert.equal(saved.routines[0].ex[2].weight, linked.weight);
+  assert.equal(saved.routines[0].ex[2].reps, linked.reps);
+  assert.equal(JSON.stringify(saved.routines[1]), JSON.stringify(pull));
+  assert.deepEqual(domain(saved), domain(state));
+  assert.equal(JSON.stringify(saved.workouts), JSON.stringify(state.workouts));
+  assert.equal(JSON.stringify(saved.week), JSON.stringify(state.week));
+  assert.equal(JSON.stringify(saved.queue), JSON.stringify(state.queue));
+  assert.equal(JSON.stringify(saved.foodLogs), JSON.stringify(state.foodLogs));
+
+  const swapped = await service('PUT', '/api/routines', { body: {
+    routine_id: 'push', revision: saved._rev,
+    exercises: [
+      { id: BENCH, position: 2 },
+      { id: BENCH, position: 1 },
+      { id: ROW, position: 3 }
+    ]
+  } });
+  assert.equal(swapped.status, 200);
+  const ordered = read().routines[0].ex;
+  assert.equal(JSON.stringify(ordered[0]), JSON.stringify(light));
+  assert.equal(ordered[1].sets, 6);
+  assert.equal(ordered[1].note, 'heavy');
+  assert.equal(ordered[2].id, ROW);
+  assert.equal(ordered[2].sg, undefined);
+
+  const stale = await service('PUT', '/api/routines', { body: { routine_id: 'push', revision: 7, name: 'Late' } });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.code, 'revision-conflict');
+
+  const created = await service('POST', '/api/routines', { body: {
+    revision: read()._rev, name: 'Two benches',
+    exercises: [
+      { id: BENCH, sets: 5, reps: 3, weight: 100 },
+      { id: BENCH, sets: 3, reps: 12, weight: 40 }
+    ]
+  } });
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.body.exercise_ids, [BENCH, BENCH]);
+  const twice = read().routines.find(routine => routine.id === created.body.routine_id);
+  assert.equal(twice.ex[0].sets, 5);
+  assert.equal(twice.ex[1].sets, 3);
+  assert.equal(twice.ex[1].weight, 40);
+  const after = read();
+  assert.equal(JSON.stringify(after.workouts), JSON.stringify(state.workouts));
+  assert.equal(JSON.stringify(after.week), JSON.stringify(state.week));
+  assert.equal(JSON.stringify(after.queue), JSON.stringify(state.queue));
+  assert.equal(JSON.stringify(after.foodLogs), JSON.stringify(state.foodLogs));
+  assert.equal(JSON.stringify(after.routines[1]), JSON.stringify(pull));
+});
+
+/* QA T5 and T10: a removal the routines API made must still be gone after stampPut.
+   PUT /api/data still puts unknown keys back; these writes opt out. */
+const QA_A = { id: '0025', sets: 3, reps: 8, weight: 60, note: 'heavy', warmupSets: [{ weight: 40, reps: 5 }], restSec: 120, inc: 5 };
+const QA_B = { id: '0025', sets: 2, reps: 15, weight: 40, note: 'backoff', restSec: 60 };
+const QA_C = { id: '0007', sets: 3, reps: 10, weight: 20, sg: 'g1', sgName: 'Arms', sgRest: 45, note: 'keep' };
+const QA_D = { id: '0001', sets: 3, reps: 12, weight: 0, bodyweight: true, sg: 'g1' };
+const QA_E = { id: '0002', sets: 3, reps: 12, weight: 0, bodyweight: true };
+const qaBase = {
+  _rev: 5, unit: 'kg', restSec: 90,
+  routines: [{ id: 'r', name: 'R', ex: [QA_A, QA_C, QA_D, QA_B, QA_E] }],
+  workouts: [{ id: 'w', d: '2026-10-01', routineId: 'r', entries: [] }],
+  foodLogs: [{ id: 'f', date: '2026-10-01', meal: 'lunch', name: 'x', version: 1 }]
+};
+const stripEx = exercise => { const copy = { ...exercise }; delete copy._ts; delete copy._f; return copy; };
+
+test('T5 remove superset partner clears sg, sgName and sgRest and keeps the rest', async t => {
+  const server = await startFoodServer(t);
+  const file = path.join(server.dataDir, 'state-u_food_a.json');
+  fs.writeFileSync(file, JSON.stringify(qaBase));
+  const read = () => JSON.parse(fs.readFileSync(file, 'utf8'));
+  const response = await server.svc('u_food_a')('PUT', '/api/routines', { body: {
+    routine_id: 'r', revision: 5,
+    exercises: [{ id: '0025' }, { id: '0007' }, { id: '0025' }, { id: '0002' }]
+  } });
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  const saved = read();
+  const { sg, sgName, sgRest, ...rest } = QA_C;
+  assert.deepEqual(stripEx(saved.routines[0].ex[1]), rest);
+  assert.equal(JSON.stringify(saved.workouts), JSON.stringify(qaBase.workouts));
+  assert.deepEqual(saved.foodLogs, qaBase.foodLogs);
+  assert.deepEqual(stripEx(saved.routines[0].ex[0]), QA_A);
+  assert.deepEqual(stripEx(saved.routines[0].ex[2]), QA_B);
+  assert.deepEqual(stripEx(saved.routines[0].ex[3]), QA_E);
+});
+
+test('T10 clearing pyramid via API actually clears it', async t => {
+  const server = await startFoodServer(t);
+  const file = path.join(server.dataDir, 'state-u_food_a.json');
+  const planned = { id: '0025', sets: 3, reps: 8, weight: 60, pyramid: [10, 8, 6], pyramidRest: [60, 90, 120], pyramidWeight: [50, 60, 70] };
+  fs.writeFileSync(file, JSON.stringify({ _rev: 3, unit: 'kg', routines: [{ id: 'r', name: 'R', ex: [planned] }], workouts: [{ id: 'w', entries: [] }], foodLogs: qaBase.foodLogs }));
+  const before = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const response = await server.svc('u_food_a')('PUT', '/api/routines', { body: {
+    routine_id: 'r', revision: 3, exercises: [{ id: '0025', pyramid: null, reps: 8 }]
+  } });
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const exercise = saved.routines[0].ex[0];
+  assert.deepEqual({ p: exercise.pyramid, pr: exercise.pyramidRest, pw: exercise.pyramidWeight }, { p: undefined, pr: undefined, pw: undefined });
+  assert.equal(exercise.reps, 8);
+  assert.equal(exercise.weight, 60);
+  assert.equal(JSON.stringify(saved.workouts), JSON.stringify(before.workouts));
+  assert.deepEqual(saved.foodLogs, before.foodLogs);
+});
+
+test('switching an exercise to time drops its pyramid, and a split superset is rejected', async t => {
+  const server = await startFoodServer(t);
+  const file = path.join(server.dataDir, 'state-u_food_a.json');
+  const planned = { id: '0025', sets: 3, reps: 8, weight: 60, mode: 'reps', pyramid: [10, 8, 6], pyramidRest: [30, 30, 30] };
+  fs.writeFileSync(file, JSON.stringify(qaBase));
+  const read = () => JSON.parse(fs.readFileSync(file, 'utf8'));
+  const original = fs.readFileSync(file);
+  const split = await server.svc('u_food_a')('PUT', '/api/routines', { body: {
+    routine_id: 'r', revision: 5,
+    exercises: [
+      { id: '0007', superset_group: 'g1' },
+      { id: '0025' },
+      { id: '0001', superset_group: 'g1' }
+    ]
+  } });
+  assert.equal(split.status, 400);
+  assert.equal(split.body.code, 'nonadjacent-superset');
+  assert.equal(split.body.field, 'exercises.0.superset_group');
+  const inherited = await server.svc('u_food_a')('PUT', '/api/routines', { body: {
+    routine_id: 'r', revision: 5,
+    exercises: [{ id: '0025' }, { id: '0007' }, { id: '0002' }, { id: '0001' }, { id: '0025' }]
+  } });
+  assert.equal(inherited.status, 400);
+  assert.equal(inherited.body.code, 'nonadjacent-superset');
+  assert.equal(inherited.body.field, 'exercises.1.superset_group');
+  assert.deepEqual(fs.readFileSync(file), original);
+
+  fs.writeFileSync(file, JSON.stringify({ _rev: 3, unit: 'kg', routines: [{ id: 'r', name: 'R', ex: [planned, QA_E] }], workouts: qaBase.workouts, foodLogs: qaBase.foodLogs }));
+  const timed = await server.svc('u_food_a')('PUT', '/api/routines', { body: {
+    routine_id: 'r', revision: 3,
+    exercises: [{ id: '0025', mode: 'time', sec: 45 }, { id: '0002' }]
+  } });
+  assert.equal(timed.status, 200, JSON.stringify(timed.body));
+  const exercise = read().routines[0].ex[0];
+  assert.equal(exercise.mode, 'time');
+  assert.equal(exercise.sec, 45);
+  assert.equal(exercise.pyramid, undefined);
+  assert.equal(exercise.pyramidRest, undefined);
+  assert.equal(JSON.stringify(read().workouts), JSON.stringify(qaBase.workouts));
+  assert.deepEqual(read().foodLogs, qaBase.foodLogs);
+  assert.deepEqual(stripEx(read().routines[0].ex[1]), QA_E);
 });

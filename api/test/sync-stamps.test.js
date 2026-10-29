@@ -140,6 +140,32 @@ test('an older app saving a routine keeps the pyramid it does not know', () => {
   assert.ok(next.routines[0]._f.ex >= NOW);   // its weight change is still an edit of its own
 });
 
+test('a routines API write may drop a pyramid and a superset name; an ordinary push may not', () => {
+  const cur = stored();
+  cur.routines[0].ex = [
+    { id: '0025', sets: 3, reps: 8, weight: 60, pyramid: [10, 8, 6], pyramidRest: [60, 90, 120], pyramidWeight: [50, 60, 70], sg: 'g1', sgName: 'Arms', sgRest: 45 },
+  ];
+  const dropped = () => {
+    const next = clone(cur);
+    delete next.edited; delete next.deleted;
+    next.routines[0].ex = [{ id: '0025', sets: 3, reps: 8, weight: 60 }];
+    return next;
+  };
+  const kept = dropped();
+  stampPut(cur, kept, { overRead: true, now: NOW });
+  assert.deepEqual(kept.routines[0].ex[0].pyramid, [10, 8, 6]);
+  assert.equal(kept.routines[0].ex[0].sgName, 'Arms');
+  const gone = dropped();
+  stampPut(cur, gone, { overRead: true, preserveUnknown: false, now: NOW });
+  assert.equal('pyramid' in gone.routines[0].ex[0], false);
+  assert.equal('pyramidRest' in gone.routines[0].ex[0], false);
+  assert.equal('pyramidWeight' in gone.routines[0].ex[0], false);
+  assert.equal('sg' in gone.routines[0].ex[0], false);
+  assert.equal('sgName' in gone.routines[0].ex[0], false);
+  assert.equal('sgRest' in gone.routines[0].ex[0], false);
+  assert.equal(gone.routines[0].ex[0].reps, 8);
+});
+
 test('an older app keeps the fields it does not know everywhere: settings, entries, sets', () => {
   const cur = stored();
   cur.accentCustom = '#ff00aa'; cur.showRir = true;
