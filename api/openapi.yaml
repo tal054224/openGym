@@ -2447,7 +2447,8 @@ paths:
         '400':
           description: >-
             Unknown field, empty routine, invalid pyramid (`code: invalid-pyramid`),
-            a superset pointing at an exercise that is not in the routine (`code: bad-superset`),
+            a superset the caller named that has no partner (`code: bad-superset`, `field` is that input),
+            an ambiguous `superset_with` (`code: ambiguous-superset`),
             or an exercise id that is not in the library (`code: not-in-library`). Nothing is written.
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409':
@@ -2459,9 +2460,14 @@ paths:
       summary: Edit a workout routine in place
       description: >-
         Changes one routine and keeps its `routine_id`. `name` renames it. `exercises`,
-        when sent, is the full new list: order is the new order, an omitted id is removed,
-        a new id is added, and an id that was already there keeps that id plus every target
-        the body does not set. Omitting `exercises` leaves every exercise byte-for-byte.
+        when sent, is the full new list: order is the new order, an omitted slot is removed,
+        a new id is added, and a slot that was already there keeps its id plus every target
+        the body does not set. The same catalogue id may appear twice; `position` (from
+        `get_routine`, 1-based) selects which copy. Omit `position` and the item takes the
+        next unmatched copy of that id, in current order. Removing one member of a superset
+        clears the leftover partner's link. A `superset_with` or `superset_group` the caller
+        sends that does not form a group is `400` and `field` names that input.
+        Omitting `exercises` leaves every exercise byte-for-byte.
         Requires the current profile `revision`; a stale revision is `409` with
         `code: revision-conflict` and writes nothing. Unknown `routine_id` is `404` with
         `code: unknown-routine`. No other part of the profile document is changed.
@@ -2480,7 +2486,9 @@ paths:
         '400':
           description: >-
             Unknown field, empty list, invalid pyramid (`code: invalid-pyramid`),
-            a superset pointing at an exercise that is not in the routine (`code: bad-superset`),
+            a superset the caller named that has no partner (`code: bad-superset`, `field` is that input),
+            an ambiguous `superset_with` (`code: ambiguous-superset`),
+            a `position` that is not an unmatched slot of that exercise (`code: bad-position`),
             or an exercise id that is not in the library (`code: not-in-library`). Nothing is written.
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404':
@@ -3915,7 +3923,12 @@ components:
       additionalProperties: false
       required: [id]
       properties:
-        id: { type: string, minLength: 1, maxLength: 64, description: Catalogue id, or one of the profile's custom exercise ids. }
+        id: { type: string, minLength: 1, maxLength: 64, description: Catalogue id, or one of the profile's custom exercise ids. The same id may appear more than once. }
+        position:
+          type: integer
+          minimum: 1
+          maximum: 200
+          description: "1-based slot from get_routine. Two copies of one exercise are two slots; position keeps a specific copy and its fields. Omit it to take the next unmatched slot with this id, in current order. id must be the exercise already in that slot."
         mode: { type: string, enum: [reps, time, cardio] }
         sets: { type: integer, minimum: 1, maximum: 30 }
         reps: { type: integer, minimum: 1, maximum: 100 }
@@ -3943,8 +3956,8 @@ components:
         min: { type: integer, minimum: 1, maximum: 240 }
         speed: { type: number, exclusiveMinimum: 0, maximum: 60 }
         rest_sec: { type: [integer, 'null'], minimum: 0, maximum: 900, description: '0 or null inherits the global rest timer.' }
-        superset_group: { type: [string, 'null'], minLength: 1, maxLength: 20, description: Shared by every member. A group of one is rejected. Null leaves the group. }
-        superset_with: { type: [string, 'null'], description: Another exercise id in this same list. An id that is not in the list is rejected. }
+        superset_group: { type: [string, 'null'], minLength: 1, maxLength: 20, description: "Shared by every member. A group the caller sets with only one member is rejected and field names this input. A stored group left with one member because its partner was removed is cleared. Null leaves the group." }
+        superset_with: { type: [string, 'null'], description: "Another exercise id in this same list. Missing, self, or more than one possible partner is rejected and field names this input. Null leaves the group." }
     RoutineCreate:
       type: object
       additionalProperties: false

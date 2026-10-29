@@ -48,6 +48,14 @@ describe('MCP routine tools', () => {
       expect(updated.isError).toBeFalsy()
       expect(apiCall).toHaveBeenCalledWith('profile-a', '/api/routines', { method: 'PUT', body: { routine_id: 'push', revision: 5, exercises: [{ id: '0001', sets: 4, pyramid: [12, 10, 'max'] }] } })
       apiCall.mockClear()
+      const copies = await client.callTool({ name: 'update_routine', arguments: {
+        routine_id: 'push', revision: 5, exercises: [{ id: '0001', position: 2 }, { id: '0001', position: 1, sets: 4 }]
+      } })
+      expect(copies.isError).toBeFalsy()
+      expect(apiCall).toHaveBeenCalledWith('profile-a', '/api/routines', { method: 'PUT', body: {
+        routine_id: 'push', revision: 5, exercises: [{ id: '0001', position: 2 }, { id: '0001', position: 1, sets: 4 }]
+      } })
+      apiCall.mockClear()
       for (const args of [
         { routine_id: 'push', revision: 5, name: 'Push', workouts: [] },
         { routine_id: 'push', revision: 5, exercises: [] },

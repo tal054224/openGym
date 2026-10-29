@@ -3094,7 +3094,7 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
   </div>
   <div class="prow rrow">
     <span class="r-code s4">400</span>
-    <span class="p-desc">Unknown field, empty routine, invalid pyramid (<code>code: invalid-pyramid</code>), a superset pointing at an exercise that is not in the routine (<code>code: bad-superset</code>), or an exercise id that is not in the library (<code>code: not-in-library</code>). Nothing is written.</span>
+    <span class="p-desc">Unknown field, empty routine, invalid pyramid (<code>code: invalid-pyramid</code>), a superset the caller named that has no partner (<code>code: bad-superset</code>, <code>field</code> is that input), an ambiguous <code>superset_with</code> (<code>code: ambiguous-superset</code>), or an exercise id that is not in the library (<code>code: not-in-library</code>). Nothing is written.</span>
   </div>
   <div class="prow rrow">
     <span class="r-code s4">401</span>
@@ -3120,7 +3120,7 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
     <span class="ep-sum">Edit a workout routine in place</span>
   </summary>
   <div class="ep-body">
-<p>Changes one routine and keeps its <code>routine_id</code>. <code>name</code> renames it. <code>exercises</code>, when sent, is the full new list: order is the new order, an omitted id is removed, a new id is added, and an id that was already there keeps that id plus every target the body does not set. Omitting <code>exercises</code> leaves every exercise byte-for-byte. Requires the current profile <code>revision</code>; a stale revision is <code>409</code> with <code>code: revision-conflict</code> and writes nothing. Unknown <code>routine_id</code> is <code>404</code> with <code>code: unknown-routine</code>. No other part of the profile document is changed. Remote MCP requires <code>routines:write</code>. There is no delete route.</p>
+<p>Changes one routine and keeps its <code>routine_id</code>. <code>name</code> renames it. <code>exercises</code>, when sent, is the full new list: order is the new order, an omitted slot is removed, a new id is added, and a slot that was already there keeps its id plus every target the body does not set. The same catalogue id may appear twice; <code>position</code> (from <code>get_routine</code>, 1-based) selects which copy. Omit <code>position</code> and the item takes the next unmatched copy of that id, in current order. Removing one member of a superset clears the leftover partner's link. A <code>superset_with</code> or <code>superset_group</code> the caller sends that does not form a group is <code>400</code> and <code>field</code> names that input. Omitting <code>exercises</code> leaves every exercise byte-for-byte. Requires the current profile <code>revision</code>; a stale revision is <code>409</code> with <code>code: revision-conflict</code> and writes nothing. Unknown <code>routine_id</code> is <code>404</code> with <code>code: unknown-routine</code>. No other part of the profile document is changed. Remote MCP requires <code>routines:write</code>. There is no delete route.</p>
     <p class="ep-auth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Requires a session: the cookie set at sign-in, or <code>Authorization: Bearer &lt;token&gt;</code> from mobile-app pairing.</span></p>
 
 <p class="ep-h">Request body</p><p class="p-desc"><a href="#schema-RoutineUpdate">RoutineUpdate</a></p>
@@ -3132,7 +3132,7 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
   </div>
   <div class="prow rrow">
     <span class="r-code s4">400</span>
-    <span class="p-desc">Unknown field, empty list, invalid pyramid (<code>code: invalid-pyramid</code>), a superset pointing at an exercise that is not in the routine (<code>code: bad-superset</code>), or an exercise id that is not in the library (<code>code: not-in-library</code>). Nothing is written.</span>
+    <span class="p-desc">Unknown field, empty list, invalid pyramid (<code>code: invalid-pyramid</code>), a superset the caller named that has no partner (<code>code: bad-superset</code>, <code>field</code> is that input), an ambiguous <code>superset_with</code> (<code>code: ambiguous-superset</code>), a <code>position</code> that is not an unmatched slot of that exercise (<code>code: bad-position</code>), or an exercise id that is not in the library (<code>code: not-in-library</code>). Nothing is written.</span>
   </div>
   <div class="prow rrow">
     <span class="r-code s4">401</span>
@@ -4448,6 +4448,11 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
     <span class="p-desc">Catalogue id</span>
   </div>
   <div class="prow">
+    <span class="p-name">position</span>
+    <span class="p-type">integer <span class="p-hint">(1&ndash;200)</span></span>
+    <span class="p-desc">1-based slot from get_routine. Two copies of one exercise are two slots; position keeps a specific copy and its fields. Omit it to take the next unmatched slot with this id, in current order. id must be the exercise already in that slot.</span>
+  </div>
+  <div class="prow">
     <span class="p-name">mode</span>
     <span class="p-type">&quot;reps&quot; | &quot;time&quot; | &quot;cardio&quot;</span>
     <span class="p-desc"></span>
@@ -4505,12 +4510,12 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
   <div class="prow">
     <span class="p-name">superset_group</span>
     <span class="p-type">string | null <span class="p-hint">(&le; 20 chars)</span></span>
-    <span class="p-desc">Shared by every member. A group of one is rejected. Null leaves the group.</span>
+    <span class="p-desc">Shared by every member. A group the caller sets with only one member is rejected and field names this input. A stored group left with one member because its partner was removed is cleared. Null leaves the group.</span>
   </div>
   <div class="prow">
     <span class="p-name">superset_with</span>
     <span class="p-type">string | null</span>
-    <span class="p-desc">Another exercise id in this same list. An id that is not in the list is rejected.</span>
+    <span class="p-desc">Another exercise id in this same list. Missing, self, or more than one possible partner is rejected and field names this input. Null leaves the group.</span>
   </div>
 </div>
   </div>

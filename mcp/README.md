@@ -99,7 +99,11 @@ the profile display unit; weight uses `weight_unit`. Navy inputs accept their ow
 `create_routine` and `update_routine` use that same profile revision (`list_routines` or
 `get_routine`). A stale revision is a conflict and writes nothing. `update_routine` keeps
 `routine_id`. An exercise already in the routine keeps its id and any target the edit omits;
-the `exercises` array is the full new order. Existing tokens do not gain `routines:write`.
+the `exercises` array is the full new order. The same exercise may appear twice. Those copies
+are separate slots; `get_routine`'s `position` tells them apart, and `update_routine` accepts
+that `position` so each copy keeps its own fields. Omitting `position` pairs copies of an id
+in their current order. Dropping one member of a superset clears the leftover partner's link.
+A superset the caller names that does not have a partner is rejected. Existing tokens do not gain `routines:write`.
 Request `routines:write` and check the routine box when connecting again to use the new tools.
 Read, food and body tools keep working on a token that was issued before this scope existed.
 
