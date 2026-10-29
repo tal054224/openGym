@@ -112,13 +112,14 @@ function prTable(S, formula) {
 /** list_routines — names + counts of each routine in the user's plan. */
 export const listRoutines = {
   name: 'list_routines',
-  description: 'List the workout routines saved in the user\'s openGym profile (the same list the Plan screen shows). Each routine is a named set of exercises with set/rep targets. Use this to discover the plan structure before diving into a specific routine or today\'s workout.',
+  description: 'List the workout routines saved in the user\'s openGym profile (the same list the Plan screen shows). Each routine is a named set of exercises with set/rep targets. Use this to discover the plan structure before diving into a specific routine or today\'s workout. `revision` is the profile revision create_routine and update_routine require.',
   schema: {},
   handler: () => {
     const S = getState()
     if (!S) return noState()
     return {
       unit: S.unit || 'kg',
+      revision: Number(S._rev) || 0,
       routines: (S.routines || []).map(r => ({
         id: r.id,
         name: r.name,
@@ -135,7 +136,7 @@ export const listRoutines = {
 /** get_routine — the full exercise list for one routine, including set/rep targets. */
 export const getRoutine = {
   name: 'get_routine',
-  description: 'Get the full exercise list for a single routine (the same view the routine editor shows). Returns mode (reps/time/cardio), set/rep/weight targets (a `pyramid` list of per-set rep targets, \'max\' meaning as many reps as possible, when the exercise uses pyramid sets, with `pyramid_rest_sec` and `pyramid_weight` per set where planned, 0 meaning the exercise\'s rest or last time\'s weight), superset links, any per-exercise custom increment or Epley deload factor, and each exercise\'s own rest in seconds (absent means it inherits the global rest timer). Use routine_id from list_routines.',
+  description: 'Get the full exercise list for a single routine (the same view the routine editor shows). Returns mode (reps/time/cardio), set/rep/weight targets (a `pyramid` list of per-set rep targets, \'max\' meaning as many reps as possible, when the exercise uses pyramid sets, with `pyramid_rest_sec` and `pyramid_weight` per set where planned, 0 meaning the exercise\'s rest or last time\'s weight), superset links, any per-exercise custom increment or Epley deload factor, and each exercise\'s own rest in seconds (absent means it inherits the global rest timer). Use routine_id from list_routines. `revision` is the profile revision update_routine requires.',
   schema: { routine_id: z.string().min(1) },
   handler: ({ routine_id }) => {
     const S = getState()
@@ -144,6 +145,7 @@ export const getRoutine = {
     if (!r) { const e = new Error(`no routine with id ${JSON.stringify(routine_id)}`); e.code = 'ENOENT'; throw e }
     return {
       id: r.id,
+      revision: Number(S._rev) || 0,
       name: r.name,
       emoji: r.emoji || null,
       policy: policyFor(null, r, 'reps'),

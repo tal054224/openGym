@@ -21,6 +21,8 @@ export const SERVICE_ROUTES = Object.freeze({
   'POST /api/body/weight': 'profile',
   'POST /api/body/measurements': 'profile',
   'PUT /api/body/options': 'profile',
+  'POST /api/routines': 'profile',
+  'PUT /api/routines': 'profile',
   'GET /api/food/{id}': 'profile',
   'POST /api/food': 'profile',
   'PUT /api/food/{id}': 'profile',

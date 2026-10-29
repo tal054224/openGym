@@ -37,6 +37,7 @@ export function consentHtml({ pending, clientName, code = '', error = '' }) {
   const host = new URL(pending.redirectUri).host
   const hasWrite = pending.scopes.includes('food:write')
   const hasBodyWrite = pending.scopes.includes('body:write')
+  const hasRoutineWrite = pending.scopes.includes('routines:write')
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect openGym</title><body>
 <main><h1>Connect openGym</h1><p><strong>${escapeHtml(clientName)}</strong> wants access to the openGym profile that created this code.</p>
 <p>Redirect host: <code>${escapeHtml(host)}</code></p><p>Read access to workouts and profile data is included.</p>
@@ -46,6 +47,7 @@ ${error ? `<p role="alert">${escapeHtml(error)}</p>` : ''}
 <label for="link_code">MCP link code</label><input id="link_code" name="link_code" maxlength="32" required autofocus>
 ${hasWrite ? '<p><label><input type="checkbox" name="food_write" value="yes"> Allow logging and changing food entries and nutrition goals</label></p>' : ''}
 ${hasBodyWrite ? '<p><label><input type="checkbox" name="body_write" value="yes"> Allow logging body weight and measurements, and changing body goals and measurement options</label></p>' : ''}
+${hasRoutineWrite ? '<p><label><input type="checkbox" name="routines_write" value="yes"> Allow creating and editing workout routines</label></p>' : ''}
 <p><button name="decision" value="approve">Connect</button> <button name="decision" value="deny">Deny</button></p></form></main></body></html>`
 }
 
@@ -58,7 +60,7 @@ export function mountConsentRoute(app, { store, baseUrl, issuerUrl, redeemLink, 
       return res.status(403).set(cspHeaders).type('text/plain').send('Request refused')
     }
     const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {}
-    if (Object.keys(body).some(k => !['id', 'csrf', 'link_code', 'food_write', 'body_write', 'decision'].includes(k)) ||
+    if (Object.keys(body).some(k => !['id', 'csrf', 'link_code', 'food_write', 'body_write', 'routines_write', 'decision'].includes(k)) ||
         typeof body.id !== 'string' || typeof body.csrf !== 'string' || typeof body.decision !== 'string') {
       return res.status(400).set(cspHeaders).type('text/plain').send('Invalid request')
     }
@@ -88,6 +90,7 @@ export function mountConsentRoute(app, { store, baseUrl, issuerUrl, redeemLink, 
     if (pending.scopes.includes('food:write') && body.food_write === 'yes') pending.scopes = [...new Set([...pending.scopes, 'food:write'])]
     else pending.scopes = pending.scopes.filter(s => s !== 'food:write')
     if (!pending.scopes.includes('body:write') || body.body_write !== 'yes') pending.scopes = pending.scopes.filter(scope => scope !== 'body:write')
+    if (!pending.scopes.includes('routines:write') || body.routines_write !== 'yes') pending.scopes = pending.scopes.filter(scope => scope !== 'routines:write')
     let profileId
     try { profileId = await redeemLink(body.link_code) }
     catch {

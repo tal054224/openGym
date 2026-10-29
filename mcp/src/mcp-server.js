@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { TOOLS } from './tools.js'
 import { FOOD_TOOLS } from './food-tools.js'
+import { ROUTINE_TOOLS } from './routine-tools.js'
 import { requestContext } from './request-context.js'
 
 const text = value => JSON.stringify(value, null, 2)
@@ -20,7 +21,7 @@ export function buildMcpServer(scopes = [], { local = false } = {}) {
       catch (error) { return errorResult(error) }
     })
   }
-  for (const tool of FOOD_TOOLS) {
+  for (const tool of [...FOOD_TOOLS, ...ROUTINE_TOOLS]) {
     if (local) continue
     if (tool.scope && !allowed.has(tool.scope)) continue
     server.registerTool(tool.name, {

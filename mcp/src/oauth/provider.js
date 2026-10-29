@@ -5,7 +5,8 @@ import { consentCsp, consentHtml } from './consent.js'
 export const READ_SCOPE = 'opengym:read'
 export const FOOD_WRITE_SCOPE = 'food:write'
 export const BODY_WRITE_SCOPE = 'body:write'
-export const SUPPORTED_SCOPES = [READ_SCOPE, FOOD_WRITE_SCOPE, BODY_WRITE_SCOPE]
+export const ROUTINES_WRITE_SCOPE = 'routines:write'
+export const SUPPORTED_SCOPES = [READ_SCOPE, FOOD_WRITE_SCOPE, BODY_WRITE_SCOPE, ROUTINES_WRITE_SCOPE]
 const random = () => crypto.randomBytes(32).toString('base64url')
 
 // The SDK answers only its own OAuthError subclasses with a 4xx; anything else is a 500.

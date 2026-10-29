@@ -224,6 +224,7 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
   <a class="side-link" href="#coach"><b>AI Coach</b><span>Plans, reviews, debriefs</span></a>
   <a class="side-link" href="#food"><b>Food</b><span>Food log &amp; nutrition goals</span></a>
   <a class="side-link" href="#body"><b>Body measurements</b><span>Weight, measurements &amp; goals</span></a>
+  <a class="side-link" href="#routines"><b>Routines</b><span>Create and edit workout routines</span></a>
   <a class="side-link" href="#mcp"><b>Remote MCP</b><span>OAuth clients &amp; link codes</span></a>
   <a class="side-link" href="#admin"><b>Admin</b><span>Users, invites, audit log, Coach</span></a>
   <a class="side-link" href="#schemas"><b>Schemas</b><span>The state blob, the error shape &amp; co.</span></a>
@@ -248,7 +249,7 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
   <p class="api-facts">
     <span>OpenAPI 3.1.0</span>
     <span>openGym v1.4.2</span>
-    <span>90 endpoints</span>
+    <span>92 endpoints</span>
     <span>AGPL-3.0-or-later</span>
   </p>
 
@@ -2922,7 +2923,7 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
     <span class="ep-sum">Update weight and body measurement goals</span>
   </summary>
   <div class="ep-body">
-<p>Requires the current profile revision. Circumferences are centimetres, bodyFat is a percentage, and weight uses the profile unit. Omitted goals are retained; null clears. MCP calls require body:write consent. General profile, workout and routine writes remain blocked.</p>
+<p>Requires the current profile revision. Circumferences are centimetres, bodyFat is a percentage, and weight uses the profile unit. Omitted goals are retained; null clears. MCP calls require body:write consent. General profile and workout writes remain blocked.</p>
     <p class="ep-auth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Requires a session: the cookie set at sign-in, or <code>Authorization: Bearer &lt;token&gt;</code> from mobile-app pairing.</span></p>
 
 <p class="ep-h">Request body</p><p class="p-desc"><a href="#schema-BodyGoalsInput">BodyGoalsInput</a></p>
@@ -3057,6 +3058,93 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
   <div class="prow rrow">
     <span class="r-code s4">409</span>
     <span class="p-desc">Stale revision.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">429</span>
+    <span class="p-desc">Paused by the sign-in throttle (see <i>Throttling</i> in the description). The request was not looked at; try again after <code>Retry-After</code> seconds.<span class="r-sig"><code>{&quot;error&quot;:&quot;too many attempts, try again later&quot;}</code></span></span>
+  </div>
+    </div>
+  </div>
+</details>
+  </div>
+</section>
+
+<section class="api-sec" id="routines">
+  <h2>Routines</h2>
+  <p class="sub">Create and edit workout routines inside the profile's existing state document. The routine id is kept, and exercises the edit does not change keep their ids. There is no delete route. Remote MCP requires explicit routines:write consent. No migration and no new environment variable.</p>
+  <div class="eps">
+
+<details class="ep" id="op-createRoutine">
+  <summary>
+    <span class="m post">POST</span>
+    <span class="ep-path"><code>/api/routines</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum">Create a workout routine</span>
+  </summary>
+  <div class="ep-body">
+<p>Appends one routine to the profile document. The server assigns <code>routine_id</code>. <code>exercises</code> is the full list and must contain at least one catalogue or custom exercise. Requires the current profile <code>revision</code> (<code>_rev</code>); a stale revision is <code>409</code> with <code>code: revision-conflict</code> and writes nothing. Does not change the week, workouts, coach week or food log. Remote MCP requires <code>routines:write</code>. There is no delete route.</p>
+    <p class="ep-auth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Requires a session: the cookie set at sign-in, or <code>Authorization: Bearer &lt;token&gt;</code> from mobile-app pairing.</span></p>
+
+<p class="ep-h">Request body</p><p class="p-desc"><a href="#schema-RoutineCreate">RoutineCreate</a></p>
+    <p class="ep-h">Responses</p>
+    <div class="ptab">
+  <div class="prow rrow">
+    <span class="r-code s2">201</span>
+    <span class="p-desc">Stored. <code>revision</code> is the new profile revision. <code>exercise_ids</code> are the stored exercise ids, in order.<span class="r-sig"><a href="#schema-RoutineWriteResult">RoutineWriteResult</a></span></span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">400</span>
+    <span class="p-desc">Unknown field, empty routine, invalid pyramid (<code>code: invalid-pyramid</code>), a superset pointing at an exercise that is not in the routine (<code>code: bad-superset</code>), or an exercise id that is not in the library (<code>code: not-in-library</code>). Nothing is written.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">401</span>
+    <span class="p-desc">No session, expired/revoked session, or a disabled account.<span class="r-sig"><code>{&quot;error&quot;:&quot;not signed in&quot;}</code></span></span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">409</span>
+    <span class="p-desc">Stale revision (code: revision-conflict). Nothing is written.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">429</span>
+    <span class="p-desc">Paused by the sign-in throttle (see <i>Throttling</i> in the description). The request was not looked at; try again after <code>Retry-After</code> seconds.<span class="r-sig"><code>{&quot;error&quot;:&quot;too many attempts, try again later&quot;}</code></span></span>
+  </div>
+    </div>
+  </div>
+</details>
+
+<details class="ep" id="op-updateRoutine">
+  <summary>
+    <span class="m put">PUT</span>
+    <span class="ep-path"><code>/api/routines</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum">Edit a workout routine in place</span>
+  </summary>
+  <div class="ep-body">
+<p>Changes one routine and keeps its <code>routine_id</code>. <code>name</code> renames it. <code>exercises</code>, when sent, is the full new list: order is the new order, an omitted id is removed, a new id is added, and an id that was already there keeps that id plus every target the body does not set. Omitting <code>exercises</code> leaves every exercise byte-for-byte. Requires the current profile <code>revision</code>; a stale revision is <code>409</code> with <code>code: revision-conflict</code> and writes nothing. Unknown <code>routine_id</code> is <code>404</code> with <code>code: unknown-routine</code>. No other part of the profile document is changed. Remote MCP requires <code>routines:write</code>. There is no delete route.</p>
+    <p class="ep-auth"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Requires a session: the cookie set at sign-in, or <code>Authorization: Bearer &lt;token&gt;</code> from mobile-app pairing.</span></p>
+
+<p class="ep-h">Request body</p><p class="p-desc"><a href="#schema-RoutineUpdate">RoutineUpdate</a></p>
+    <p class="ep-h">Responses</p>
+    <div class="ptab">
+  <div class="prow rrow">
+    <span class="r-code s2">200</span>
+    <span class="p-desc">Stored. <code>routine_id</code> is the same id that was sent.<span class="r-sig"><a href="#schema-RoutineWriteResult">RoutineWriteResult</a></span></span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">400</span>
+    <span class="p-desc">Unknown field, empty list, invalid pyramid (<code>code: invalid-pyramid</code>), a superset pointing at an exercise that is not in the routine (<code>code: bad-superset</code>), or an exercise id that is not in the library (<code>code: not-in-library</code>). Nothing is written.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">401</span>
+    <span class="p-desc">No session, expired/revoked session, or a disabled account.<span class="r-sig"><code>{&quot;error&quot;:&quot;not signed in&quot;}</code></span></span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">404</span>
+    <span class="p-desc">No routine with that id (code: unknown-routine). Nothing is written.</span>
+  </div>
+  <div class="prow rrow">
+    <span class="r-code s4">409</span>
+    <span class="p-desc">Stale revision (code: revision-conflict). Nothing is written.</span>
   </div>
   <div class="prow rrow">
     <span class="r-code s4">429</span>
@@ -4339,6 +4427,193 @@ main.api-main .lead { color: var(--fg-2); max-width: 58ch; margin: 14px 0 0; fon
   <div class="prow">
     <span class="p-name">custom[].enabled<em class="p-req" title="required">required</em></span>
     <span class="p-type">boolean</span>
+    <span class="p-desc"></span>
+  </div>
+</div>
+  </div>
+</details>
+
+<details class="ep sch" id="schema-RoutineExerciseInput">
+  <summary>
+    <span class="sch-name"><code>RoutineExerciseInput</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum"></span>
+  </summary>
+  <div class="ep-body">
+
+<div class="ptab">
+  <div class="prow">
+    <span class="p-name">id<em class="p-req" title="required">required</em></span>
+    <span class="p-type">string <span class="p-hint">(&le; 64 chars)</span></span>
+    <span class="p-desc">Catalogue id</span>
+  </div>
+  <div class="prow">
+    <span class="p-name">mode</span>
+    <span class="p-type">&quot;reps&quot; | &quot;time&quot; | &quot;cardio&quot;</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">sets</span>
+    <span class="p-type">integer <span class="p-hint">(1&ndash;30)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">reps</span>
+    <span class="p-type">integer <span class="p-hint">(1&ndash;100)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">weight</span>
+    <span class="p-type">number <span class="p-hint">(0&ndash;2000)</span></span>
+    <span class="p-desc">Profile weight unit.</span>
+  </div>
+  <div class="prow">
+    <span class="p-name">pyramid</span>
+    <span class="p-type">array | null</span>
+    <span class="p-desc">Per-set rep targets. <code>max</code> means as many reps as possible. Null clears the pyramid.</span>
+  </div>
+  <div class="prow">
+    <span class="p-name">pyramid_rest_sec</span>
+    <span class="p-type">array | null</span>
+    <span class="p-desc">One rest per pyramid set, seconds. 0 uses the exercise rest. Same length as pyramid. Null clears.</span>
+  </div>
+  <div class="prow">
+    <span class="p-name">pyramid_weight</span>
+    <span class="p-type">array | null</span>
+    <span class="p-desc">One planned weight per pyramid set. 0 means last time's weight. Same length as pyramid. Null clears.</span>
+  </div>
+  <div class="prow">
+    <span class="p-name">sec</span>
+    <span class="p-type">integer <span class="p-hint">(1&ndash;3600)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">min</span>
+    <span class="p-type">integer <span class="p-hint">(1&ndash;240)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">speed</span>
+    <span class="p-type">number <span class="p-hint">(&ndash;60)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">rest_sec</span>
+    <span class="p-type">integer | null <span class="p-hint">(0&ndash;900)</span></span>
+    <span class="p-desc">0 or null inherits the global rest timer.</span>
+  </div>
+  <div class="prow">
+    <span class="p-name">superset_group</span>
+    <span class="p-type">string | null <span class="p-hint">(&le; 20 chars)</span></span>
+    <span class="p-desc">Shared by every member. A group of one is rejected. Null leaves the group.</span>
+  </div>
+  <div class="prow">
+    <span class="p-name">superset_with</span>
+    <span class="p-type">string | null</span>
+    <span class="p-desc">Another exercise id in this same list. An id that is not in the list is rejected.</span>
+  </div>
+</div>
+  </div>
+</details>
+
+<details class="ep sch" id="schema-RoutineCreate">
+  <summary>
+    <span class="sch-name"><code>RoutineCreate</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum"></span>
+  </summary>
+  <div class="ep-body">
+
+<div class="ptab">
+  <div class="prow">
+    <span class="p-name">revision<em class="p-req" title="required">required</em></span>
+    <span class="p-type">integer <span class="p-hint">(0&ndash;)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">name<em class="p-req" title="required">required</em></span>
+    <span class="p-type">string <span class="p-hint">(&le; 80 chars)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">exercises<em class="p-req" title="required">required</em></span>
+    <span class="p-type"><a href="#schema-RoutineExerciseInput">RoutineExerciseInput</a>[]</span>
+    <span class="p-desc"></span>
+  </div>
+</div>
+  </div>
+</details>
+
+<details class="ep sch" id="schema-RoutineUpdate">
+  <summary>
+    <span class="sch-name"><code>RoutineUpdate</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum">At least one of name or exercises is required.</span>
+  </summary>
+  <div class="ep-body">
+
+<div class="ptab">
+  <div class="prow">
+    <span class="p-name">revision<em class="p-req" title="required">required</em></span>
+    <span class="p-type">integer <span class="p-hint">(0&ndash;)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">routine_id<em class="p-req" title="required">required</em></span>
+    <span class="p-type">string <span class="p-hint">(&le; 64 chars)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">name</span>
+    <span class="p-type">string <span class="p-hint">(&le; 80 chars)</span></span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">exercises</span>
+    <span class="p-type"><a href="#schema-RoutineExerciseInput">RoutineExerciseInput</a>[]</span>
+    <span class="p-desc"></span>
+  </div>
+</div>
+  </div>
+</details>
+
+<details class="ep sch" id="schema-RoutineWriteResult">
+  <summary>
+    <span class="sch-name"><code>RoutineWriteResult</code></span>
+    <span class="ep-chev" aria-hidden="true"></span>
+    <span class="ep-sum"></span>
+  </summary>
+  <div class="ep-body">
+
+<div class="ptab">
+  <div class="prow">
+    <span class="p-name">ok<em class="p-req" title="required">required</em></span>
+    <span class="p-type">boolean</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">created</span>
+    <span class="p-type">boolean</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">revision<em class="p-req" title="required">required</em></span>
+    <span class="p-type">integer</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">routine_id<em class="p-req" title="required">required</em></span>
+    <span class="p-type">string</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">name<em class="p-req" title="required">required</em></span>
+    <span class="p-type">string</span>
+    <span class="p-desc"></span>
+  </div>
+  <div class="prow">
+    <span class="p-name">exercise_ids<em class="p-req" title="required">required</em></span>
+    <span class="p-type">string[]</span>
     <span class="p-desc"></span>
   </div>
 </div>

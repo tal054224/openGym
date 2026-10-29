@@ -34,9 +34,22 @@ export async function apiCall(profileId, path, { method = 'GET', body } = {}) {
     if (!response.ok) {
       const status = response.status
       const code = status === 404 ? 'NOT_FOUND' : status === 409 ? 'CONFLICT' : status === 400 ? 'INVALID_INPUT' : status === 401 || status === 403 ? 'UNAUTHORIZED' : 'UNAVAILABLE'
-      const error = new Error(code === 'INVALID_INPUT' && typeof data?.field === 'string' ? `invalid ${data.field}` : 'request could not be completed')
+      const field = typeof data?.field === 'string' && /^[A-Za-z0-9_.]+$/.test(data.field) ? data.field : undefined
+      const known = {
+        'unknown-routine': 'no routine with that id',
+        'revision-conflict': 'revision conflict',
+        'not-in-library': 'exercise is not in the library',
+        'empty-routine': 'routine must contain at least one exercise',
+        'invalid-pyramid': 'invalid pyramid',
+        'bad-superset': 'superset points at an exercise that is not in this routine',
+        'invalid-superset': 'invalid superset',
+        'unknown-field': field ? `unknown field ${field}` : 'unknown field',
+        'nothing-to-update': 'nothing to update',
+        'duplicate-exercise': 'exercise is listed more than once'
+      }[data?.code]
+      const error = new Error(known || (code === 'INVALID_INPUT' && field ? `invalid ${field}` : 'request could not be completed'))
       error.code = code
-      error.field = code === 'INVALID_INPUT' && typeof data?.field === 'string' ? data.field : undefined
+      error.field = code === 'INVALID_INPUT' ? field : undefined
       throw error
     }
     if (!data || typeof data !== 'object') throw Object.assign(new Error('invalid API response'), { code: 'UNAVAILABLE' })
