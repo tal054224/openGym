@@ -467,14 +467,16 @@ function keepHeld(next, now) {
  * `cur` is the stored document (or null),
  * `next` the one being written (mutated in place), `opts.overRead` true when the writer sent the
  * revision it read and it is the current one, `opts.stamped` true for a writer that stamps its own
- * changes (the app), `opts.now` the server's clock.
+ * changes (the app), `opts.now` the server's clock. `opts.preserveUnknown` is false only for the
+ * routines API, which copied the stored exercise and deleted a key on purpose. PUT /api/data
+ * leaves it on, so an older app still cannot drop a field it does not know.
  */
 // What a document says, without its stamps and the server's bookkeeping: whether the server put
 // back anything of what a writer sent (stampPut's `report`).
 const BOOKKEEPING = new Set(['_ts', '_f', '_u', '_rev', '_wid', '_wids', '_unstamped', '_prior', 'edited', 'deleted', 'undone']);
 const content = S => JSON.stringify(S, (k, v) => (BOOKKEEPING.has(k) ? undefined : v));
 
-export function stampPut(cur, next, { overRead = false, stamped = false, now = Date.now(), report = null } = {}) {
+export function stampPut(cur, next, { overRead = false, stamped = false, now = Date.now(), report = null, preserveUnknown = true } = {}) {
   if (!next || typeof next !== 'object') return next;
   const t = Math.max(Number(now) || 0, highestStamp(cur) + 1, highestStamp(next) + 1);
   const reset = (Number(next.resetAt) || 0) > (Number(cur?.resetAt) || 0);
@@ -495,7 +497,7 @@ export function stampPut(cur, next, { overRead = false, stamped = false, now = D
     if (e) { delete e._wid; delete e._wids; }
     if (e && Object.keys(e).length) next.edited = e; else delete next.edited;
     const before = !stamped && report ? content(next) : null;
-    if (!stamped) keepUnknown(cur, next);
+    if (!stamped && preserveUnknown) keepUnknown(cur, next);
     if (!stamped && overRead) {
       const fp = fingerprint(sent);
       const own = isMap(cur._unstamped) && cur._unstamped.fp === fp ? cur._unstamped : null;

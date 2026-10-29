@@ -2488,6 +2488,7 @@ paths:
             Unknown field, empty list, invalid pyramid (`code: invalid-pyramid`),
             a superset the caller named that has no partner (`code: bad-superset`, `field` is that input),
             an ambiguous `superset_with` (`code: ambiguous-superset`),
+            superset members that are not next to each other (`code: nonadjacent-superset`, `field` is that input),
             a `position` that is not an unmatched slot of that exercise (`code: bad-position`),
             or an exercise id that is not in the library (`code: not-in-library`). Nothing is written.
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -3956,8 +3957,8 @@ components:
         min: { type: integer, minimum: 1, maximum: 240 }
         speed: { type: number, exclusiveMinimum: 0, maximum: 60 }
         rest_sec: { type: [integer, 'null'], minimum: 0, maximum: 900, description: '0 or null inherits the global rest timer.' }
-        superset_group: { type: [string, 'null'], minLength: 1, maxLength: 20, description: "Shared by every member. A group the caller sets with only one member is rejected and field names this input. A stored group left with one member because its partner was removed is cleared. Null leaves the group." }
-        superset_with: { type: [string, 'null'], description: "Another exercise id in this same list. Missing, self, or more than one possible partner is rejected and field names this input. Null leaves the group." }
+        superset_group: { type: [string, 'null'], minLength: 1, maxLength: 20, description: "Shared by every member, who must be next to each other. A group the caller sets with only one member, or with an exercise between its members, is rejected and field names this input. A stored group left with one member because its partner was removed is cleared, including its name and rest. Null leaves the group." }
+        superset_with: { type: [string, 'null'], description: "Another exercise id in this same list. The two must end up next to each other. Missing, self, ambiguous, or non-adjacent is rejected and field names this input. Null leaves the group." }
     RoutineCreate:
       type: object
       additionalProperties: false

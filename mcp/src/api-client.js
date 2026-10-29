@@ -42,6 +42,7 @@ export async function apiCall(profileId, path, { method = 'GET', body } = {}) {
         'empty-routine': 'routine must contain at least one exercise',
         'invalid-pyramid': 'invalid pyramid',
         'bad-superset': 'superset points at an exercise that is not in this routine',
+        'nonadjacent-superset': 'superset members must be next to each other',
         'ambiguous-superset': 'superset target matches more than one exercise',
         'bad-position': 'position does not match an exercise in this routine',
         'invalid-superset': 'invalid superset',

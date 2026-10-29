@@ -262,6 +262,22 @@ function applySupersets(built, incoming) {
     }
     clearSuperset(exercise);
   });
+  // The app only keeps a superset whose members sit next to each other (cleanupSg). A link
+  // with something between its members is dropped the next time the editor saves, so refuse it.
+  const groups = new Map();
+  built.forEach((exercise, index) => {
+    if (!exercise.sg) return;
+    const list = groups.get(exercise.sg) || [];
+    list.push(index);
+    groups.set(exercise.sg, list);
+  });
+  for (const indexes of groups.values()) {
+    const together = indexes.every((value, i) => i === 0 || value === indexes[i - 1] + 1);
+    if (together && indexes.length >= 2) continue;
+    const offender = indexes.find(index => explicit[index]) ?? indexes[0];
+    const key = explicit[offender] || 'superset_group';
+    fail('superset members must be next to each other', `exercises.${offender}.${key}`, 'nonadjacent-superset');
+  }
 }
 
 function buildExercises(storedList, incoming, state) {

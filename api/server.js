@@ -2905,7 +2905,9 @@ const routes = {
     stampState: (prior, next) => stampPut(prior, next, { overRead: true }),
     readState: uid => { const state = readStateStrict(uid); if (state === UNREADABLE) throw new Error('profile state is unreadable'); return state; } }),
   ...routineRoutes({ json, readBody, readSession, writeLimit: FOOD_WRITES, writeState: writeFoodState,
-    stampState: (prior, next) => stampPut(prior, next, { overRead: true }),
+    // The route copied the stored exercise and removed keys on purpose. keepUnknown would put
+    // pyramid and sgName back, because an older app is not allowed to drop them.
+    stampState: (prior, next) => stampPut(prior, next, { overRead: true, preserveUnknown: false }),
     readState: uid => { const state = readStateStrict(uid); if (state === UNREADABLE) throw new Error('profile state is unreadable'); return state; } }),
   /* ---------- remote MCP account links (homelab) ---------- */
   ...mcpLinkRoutes({ json, readBody, readSession, proveOwner, audit, db, saveDb, addressPaused, strikeAddress }),
