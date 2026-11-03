@@ -41,6 +41,7 @@ export async function apiCall(profileId, path, { method = 'GET', body } = {}) {
         'not-in-library': 'exercise is not in the library',
         'empty-routine': 'routine must contain at least one exercise',
         'invalid-pyramid': 'invalid pyramid',
+        'invalid-rest': 'rest_sec must be 1-900 seconds, or null to inherit the global rest timer. 0 is not stored: the app treats 0 the same as a missing rest',
         'bad-superset': 'superset points at an exercise that is not in this routine',
         'nonadjacent-superset': 'superset members must be next to each other',
         'ambiguous-superset': 'superset target matches more than one exercise',

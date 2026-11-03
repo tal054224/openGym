@@ -157,7 +157,12 @@ function applyTargets(base, raw, field, info) {
     base.speed = round2(raw.speed);
   }
   if ('rest_sec' in raw) {
-    if (raw.rest_sec == null || raw.rest_sec === 0) delete base.restSec;
+    // Null drops the field, and the exercise inherits the global timer. 0 is not that, and it is
+    // not "no rest" either: the app's wheel, its save, and restSecFor all treat 0 like a missing
+    // rest and still use the global timer. Deleting it here used to answer ok and then omit the
+    // field on the next read. Reject it so the write does not pretend to stick.
+    if (raw.rest_sec == null) delete base.restSec;
+    else if (raw.rest_sec === 0) fail('rest_sec 0 is not stored. Send null to inherit the global rest timer, or 1-900 for an explicit rest. The app treats 0 the same as a missing rest.', where('rest_sec'), 'invalid-rest');
     else if (!isInt(raw.rest_sec, 1, REST_MAX)) fail('invalid rest', where('rest_sec'), 'invalid-rest');
     else base.restSec = raw.rest_sec;
   }

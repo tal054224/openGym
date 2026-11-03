@@ -45,6 +45,12 @@ describe('MCP service API client', () => {
     const { apiCall } = await clientWithToken()
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'secret food contents', field: 'calories' }), { status: 400 }))
     await expect(apiCall('profile-a', '/api/food', { method: 'POST', body: {} })).rejects.toMatchObject({ code: 'INVALID_INPUT', message: 'invalid calories' })
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'secret routine contents', code: 'invalid-rest', field: 'exercises.1.rest_sec' }), { status: 400 }))
+    await expect(apiCall('profile-a', '/api/routines', { method: 'PUT', body: {} })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      field: 'exercises.1.rest_sec',
+      message: 'rest_sec must be 1-900 seconds, or null to inherit the global rest timer. 0 is not stored: the app treats 0 the same as a missing rest'
+    })
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'private profile data' }), { status: 500 }))
     await expect(apiCall('profile-a', '/api/food')).rejects.toMatchObject({ code: 'UNAVAILABLE', message: 'request could not be completed' })
   })
