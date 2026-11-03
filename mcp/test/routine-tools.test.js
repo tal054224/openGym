@@ -56,11 +56,20 @@ describe('MCP routine tools', () => {
         routine_id: 'push', revision: 5, exercises: [{ id: '0001', position: 2 }, { id: '0001', position: 1, sets: 4 }]
       } })
       apiCall.mockClear()
+      const withRest = await client.callTool({ name: 'update_routine', arguments: {
+        routine_id: 'push', revision: 5, exercises: [{ id: '0001', position: 2, rest_sec: 60 }, { id: '0001', position: 1, rest_sec: null }]
+      } })
+      expect(withRest.isError).toBeFalsy()
+      expect(apiCall).toHaveBeenCalledWith('profile-a', '/api/routines', { method: 'PUT', body: {
+        routine_id: 'push', revision: 5, exercises: [{ id: '0001', position: 2, rest_sec: 60 }, { id: '0001', position: 1, rest_sec: null }]
+      } })
+      apiCall.mockClear()
       for (const args of [
         { routine_id: 'push', revision: 5, name: 'Push', workouts: [] },
         { routine_id: 'push', revision: 5, exercises: [] },
         { routine_id: 'push', revision: 5, exercises: [{ id: '0001', pyramid: [12, 0, 8] }] },
-        { revision: 5, name: 'Push', exercises: [{ id: '0001' }], routine_id: 'nope' }
+        { routine_id: 'push', revision: 5, exercises: [{ id: '0001', position: 2, rest_sec: 0 }, { id: '0001', position: 1, sets: 4 }] },
+        { revision: 5, name: 'Push', exercises: [{ id: '0001', rest_sec: 0 }], routine_id: 'nope' }
       ]) {
         const invalid = await client.callTool({ name: args.routine_id === 'nope' ? 'create_routine' : 'update_routine', arguments: args })
         expect(invalid.isError).toBe(true)

@@ -379,3 +379,114 @@ test('switching an exercise to time drops its pyramid, and a split superset is r
   assert.deepEqual(read().foodLogs, qaBase.foodLogs);
   assert.deepEqual(stripEx(read().routines[0].ex[1]), QA_E);
 });
+
+test('rest_sec 0 is rejected, null clears, and 60 stays on the addressed slot', async t => {
+  const heavy = { id: BENCH, sets: 5, reps: 3, weight: 100, note: 'heavy', warmupSets: [{ weight: 60, reps: 3 }], restSec: 120, inc: 2.5, marker: 'keep-heavy' };
+  const light = { id: BENCH, sets: 3, reps: 12, weight: 40, note: 'light', restSec: 75, inc: 1.25, marker: 'keep-light' };
+  const plain = { id: ROW, sets: 3, reps: 10, weight: 20, note: 'row note' };
+  const state = {
+    ...profile,
+    routines: [
+      { id: 'push', name: 'Push', emoji: '🏋️', prog: 'linear', ex: [heavy, light, plain] },
+      pull
+    ]
+  };
+  const server = await startFoodServer(t);
+  const file = path.join(server.dataDir, 'state-u_food_a.json');
+  fs.writeFileSync(file, JSON.stringify(state));
+  const service = server.svc('u_food_a');
+  const read = () => JSON.parse(fs.readFileSync(file, 'utf8'));
+  const bytes = () => fs.readFileSync(file);
+  const original = bytes();
+
+  const zero = await service('PUT', '/api/routines', { body: {
+    routine_id: 'push', revision: 7,
+    exercises: [
+      { id: BENCH, position: 1, sets: 8 },
+      { id: BENCH, position: 2, rest_sec: 0 },
+      { id: ROW, position: 3 }
+    ]
+  } });
+  assert.equal(zero.status, 400);
+  assert.equal(zero.body.code, 'invalid-rest');
+  assert.equal(zero.body.field, 'exercises.1.rest_sec');
+  assert.match(zero.body.error, /null/);
+  assert.deepEqual(bytes(), original);
+  assert.equal(read()._rev, 7);
+
+  const createdZero = await service('POST', '/api/routines', { body: {
+    revision: 7, name: 'No rest', exercises: [{ id: BENCH, rest_sec: 0 }]
+  } });
+  assert.equal(createdZero.status, 400);
+  assert.equal(createdZero.body.code, 'invalid-rest');
+  assert.equal(createdZero.body.field, 'exercises.0.rest_sec');
+  assert.deepEqual(bytes(), original);
+
+  const kept = await service('PUT', '/api/routines', { body: {
+    routine_id: 'push', revision: 7,
+    exercises: [
+      { id: BENCH, position: 1 },
+      { id: BENCH, position: 2, rest_sec: 60 },
+      { id: ROW, position: 3 }
+    ]
+  } });
+  assert.equal(kept.status, 200, JSON.stringify(kept.body));
+  assert.equal(kept.body.revision, 8);
+  let saved = read();
+  assert.equal(saved.routines[0].ex[0].restSec, 120);
+  assert.equal(saved.routines[0].ex[0].sets, 5);
+  assert.equal(saved.routines[0].ex[0].note, 'heavy');
+  assert.equal(saved.routines[0].ex[0].marker, 'keep-heavy');
+  assert.deepEqual(saved.routines[0].ex[0].warmupSets, heavy.warmupSets);
+  assert.equal(saved.routines[0].ex[0].inc, 2.5);
+  assert.equal(saved.routines[0].ex[1].restSec, 60);
+  assert.equal(saved.routines[0].ex[1].sets, 3);
+  assert.equal(saved.routines[0].ex[1].note, 'light');
+  assert.equal(saved.routines[0].ex[1].marker, 'keep-light');
+  assert.equal(saved.routines[0].ex[1].inc, 1.25);
+  assert.equal(JSON.stringify(saved.routines[0].ex[2]), JSON.stringify(plain));
+  assert.equal(JSON.stringify(saved.routines[1]), JSON.stringify(pull));
+  assert.deepEqual(domain(saved), domain(state));
+  assert.equal(JSON.stringify(saved.workouts), JSON.stringify(state.workouts));
+
+  const cleared = await service('PUT', '/api/routines', { body: {
+    routine_id: 'push', revision: saved._rev,
+    exercises: [
+      { id: BENCH, position: 2, rest_sec: null },
+      { id: BENCH, position: 1 },
+      { id: ROW, position: 3 }
+    ]
+  } });
+  assert.equal(cleared.status, 200, JSON.stringify(cleared.body));
+  saved = read();
+  assert.equal(saved._rev, 9);
+  assert.equal(saved.routines[0].ex[0].restSec, undefined);
+  assert.equal(saved.routines[0].ex[0].note, 'light');
+  assert.equal(saved.routines[0].ex[0].marker, 'keep-light');
+  assert.equal(saved.routines[0].ex[0].sets, 3);
+  assert.equal(saved.routines[0].ex[0].inc, 1.25);
+  assert.equal(saved.routines[0].ex[1].restSec, 120);
+  assert.equal(saved.routines[0].ex[1].note, 'heavy');
+  assert.equal(saved.routines[0].ex[1].marker, 'keep-heavy');
+  assert.deepEqual(saved.routines[0].ex[1].warmupSets, heavy.warmupSets);
+  assert.equal(JSON.stringify(saved.routines[0].ex[2]), JSON.stringify(plain));
+  assert.equal(JSON.stringify(saved.workouts), JSON.stringify(state.workouts));
+  assert.equal(JSON.stringify(saved.routines[1]), JSON.stringify(pull));
+
+  const again = await service('PUT', '/api/routines', { body: {
+    routine_id: 'push', revision: saved._rev,
+    exercises: [
+      { id: BENCH, position: 1, sets: 9, rest_sec: 0 },
+      { id: BENCH, position: 2 },
+      { id: ROW, position: 3 }
+    ]
+  } });
+  assert.equal(again.status, 400);
+  assert.equal(again.body.code, 'invalid-rest');
+  assert.equal(again.body.field, 'exercises.0.rest_sec');
+  const afterReject = read();
+  assert.equal(afterReject._rev, saved._rev);
+  assert.equal(afterReject.routines[0].ex[0].sets, 3);
+  assert.equal(afterReject.routines[0].ex[0].restSec, undefined);
+  assert.equal(afterReject.routines[0].ex[1].restSec, 120);
+});
