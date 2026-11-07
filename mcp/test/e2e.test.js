@@ -124,53 +124,6 @@ describe('remote MCP end to end', () => {
     expect(foreign).toBe(403)
   })
 
-  it('returns the published issuer string on consent deny redirects', async () => {
-    const link = await apiCall('POST', '/api/account/mcp-link', { uid: 'u_e2e_a', body: { current: PASSWORD } })
-    expect(link.status).toBe(200)
-
-    const reg = await fetch(base + '/register', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        client_name: 'Deny client',
-        redirect_uris: [REDIRECT],
-        token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code', 'refresh_token'],
-        response_types: ['code']
-      })
-    })
-    expect(reg.status).toBe(201)
-    const client = await reg.json()
-    const as = await (await fetch(base + '/.well-known/oauth-authorization-server')).json()
-
-    const auth = await fetch(base + '/authorize?' + new URLSearchParams({
-      response_type: 'code',
-      client_id: client.client_id,
-      redirect_uri: REDIRECT,
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-      resource: base + '/mcp',
-      scope: 'opengym:read',
-      state: 'deny-state'
-    }), { redirect: 'manual' })
-    expect(auth.status).toBe(200)
-    const html = await auth.text()
-    const id = /name="id" value="([^"]+)"/.exec(html)[1]
-    const csrf = /name="csrf" value="([^"]+)"/.exec(html)[1]
-    const cookie = auth.headers.get('set-cookie').split(';')[0]
-
-    const denied = await fetch(base + '/authorize/consent', {
-      method: 'POST',
-      redirect: 'manual',
-      headers: { origin: base, 'sec-fetch-site': 'same-origin', cookie, 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ id, csrf, decision: 'deny' })
-    })
-    expect(denied.status).toBe(303)
-    const location = new URL(denied.headers.get('location'))
-    expect(location.searchParams.get('error')).toBe('access_denied')
-    expect(location.searchParams.get('iss')).toBe(as.issuer)
-  })
-
   it('runs food goals, measurement reads and calculations end to end with only food writes', async () => {
     const { tokens } = await connect('u_e2e_a')
     const c = await mcp(tokens.access_token)
@@ -318,9 +271,28 @@ describe('remote MCP end to end', () => {
     const reg = await fetch(base + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ redirect_uris: ['http://x.example/cb'], token_endpoint_auth_method: 'none' }) })
     expect(reg.status).toBe(400)
     const ok = await (await fetch(base + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ redirect_uris: [REDIRECT], token_endpoint_auth_method: 'none' }) })).json()
+    const as = await (await fetch(base + '/.well-known/oauth-authorization-server')).json()
     const q = extra => fetch(base + '/authorize?' + new URLSearchParams({ response_type: 'code', client_id: ok.client_id, redirect_uri: REDIRECT, code_challenge: challenge, code_challenge_method: 'S256', resource: base + '/mcp', ...extra }), { redirect: 'manual' })
     const noResource = new URLSearchParams({ response_type: 'code', client_id: ok.client_id, redirect_uri: REDIRECT, code_challenge: challenge, code_challenge_method: 'S256' })
     expect(new URL((await fetch(base + '/authorize?' + noResource, { redirect: 'manual' })).headers.get('location')).searchParams.get('error')).toBe('invalid_target')
+
+    const forDeny = await q({ scope: 'opengym:read', state: 'deny-state' })
+    expect(forDeny.status).toBe(200)
+    const denyHtml = await forDeny.text()
+    const denyId = /name="id" value="([^"]+)"/.exec(denyHtml)[1]
+    const denyCsrf = /name="csrf" value="([^"]+)"/.exec(denyHtml)[1]
+    const denyCookie = forDeny.headers.get('set-cookie').split(';')[0]
+    const denied = await fetch(base + '/authorize/consent', {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { origin: base, 'sec-fetch-site': 'same-origin', cookie: denyCookie, 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ id: denyId, csrf: denyCsrf, decision: 'deny' })
+    })
+    expect(denied.status).toBe(303)
+    const deniedLocation = new URL(denied.headers.get('location'))
+    expect(deniedLocation.searchParams.get('error')).toBe('access_denied')
+    expect(deniedLocation.searchParams.get('iss')).toBe(as.issuer)
+
     expect(new URL((await q({ code_challenge_method: 'plain' })).headers.get('location')).searchParams.get('error')).toBe('invalid_request')
     expect(new URL((await q({ redirect_uri: 'https://evil.example/cb' })).headers.get('location') || 'https://x/?error=invalid_request').searchParams.get('error')).toBe('invalid_request')
     expect((await q({ redirect_uri: 'https://evil.example/cb' })).status).toBe(400)
