@@ -53,6 +53,7 @@ async function connect(uid, { write = true, bodyWrite = false, routineWrite = fa
     body: JSON.stringify({ client_name: name, redirect_uris: [REDIRECT], token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'] }) })
   expect(reg.status).toBe(201)
   const client = await reg.json()
+  const as = await (await fetch(base + '/.well-known/oauth-authorization-server')).json()
   const auth = await fetch(base + '/authorize?' + new URLSearchParams({ response_type: 'code', client_id: client.client_id, redirect_uri: REDIRECT,
     code_challenge: challenge, code_challenge_method: 'S256', resource: base + '/mcp', scope: 'opengym:read food:write body:write routines:write', state: 's1' }), { redirect: 'manual' })
   expect(auth.status).toBe(200)
@@ -64,7 +65,9 @@ async function connect(uid, { write = true, bodyWrite = false, routineWrite = fa
     headers: { origin: base, 'sec-fetch-site': 'same-origin', cookie, 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ id, csrf, link_code: link.body.code, decision: 'approve', ...(write ? { food_write: 'yes' } : {}), ...(bodyWrite ? { body_write: 'yes' } : {}), ...(routineWrite ? { routines_write: 'yes' } : {}) }) })
   expect(consent.status).toBe(303)
-  const code = new URL(consent.headers.get('location')).searchParams.get('code')
+  const consentLocation = new URL(consent.headers.get('location'))
+  expect(consentLocation.searchParams.get('iss')).toBe(as.issuer)
+  const code = consentLocation.searchParams.get('code')
   const token = await fetch(base + '/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'authorization_code', client_id: client.client_id, code, redirect_uri: REDIRECT, code_verifier: verifier, resource: base + '/mcp' }) })
   expect(token.status).toBe(200)
@@ -119,6 +122,53 @@ describe('remote MCP end to end', () => {
       req.end()
     })
     expect(foreign).toBe(403)
+  })
+
+  it('returns the published issuer string on consent deny redirects', async () => {
+    const link = await apiCall('POST', '/api/account/mcp-link', { uid: 'u_e2e_a', body: { current: PASSWORD } })
+    expect(link.status).toBe(200)
+
+    const reg = await fetch(base + '/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        client_name: 'Deny client',
+        redirect_uris: [REDIRECT],
+        token_endpoint_auth_method: 'none',
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code']
+      })
+    })
+    expect(reg.status).toBe(201)
+    const client = await reg.json()
+    const as = await (await fetch(base + '/.well-known/oauth-authorization-server')).json()
+
+    const auth = await fetch(base + '/authorize?' + new URLSearchParams({
+      response_type: 'code',
+      client_id: client.client_id,
+      redirect_uri: REDIRECT,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      resource: base + '/mcp',
+      scope: 'opengym:read',
+      state: 'deny-state'
+    }), { redirect: 'manual' })
+    expect(auth.status).toBe(200)
+    const html = await auth.text()
+    const id = /name="id" value="([^"]+)"/.exec(html)[1]
+    const csrf = /name="csrf" value="([^"]+)"/.exec(html)[1]
+    const cookie = auth.headers.get('set-cookie').split(';')[0]
+
+    const denied = await fetch(base + '/authorize/consent', {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { origin: base, 'sec-fetch-site': 'same-origin', cookie, 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ id, csrf, decision: 'deny' })
+    })
+    expect(denied.status).toBe(303)
+    const location = new URL(denied.headers.get('location'))
+    expect(location.searchParams.get('error')).toBe('access_denied')
+    expect(location.searchParams.get('iss')).toBe(as.issuer)
   })
 
   it('runs food goals, measurement reads and calculations end to end with only food writes', async () => {

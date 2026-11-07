@@ -12,9 +12,8 @@ import { createOAuthProvider, SUPPORTED_SCOPES } from '../src/oauth/provider.js'
 import { createClientsStore } from '../src/oauth/clients-store.js'
 import { mountConsentRoute } from '../src/oauth/consent.js'
 
-let dir, store, server, base, provider
-const issuer = 'http://localhost'
-const resource = 'http://localhost/mcp'
+let dir, store, server, base, provider, issuer, resource
+const DEFAULT_ISSUER = 'http://localhost'
 const redirect = 'https://client.example/callback'
 const verifier = 'a'.repeat(43)
 const challenge = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)).then(b => Buffer.from(b).toString('base64url'))
@@ -27,7 +26,9 @@ afterEach(async () => {
   dir = null
 })
 
-async function start() {
+async function start({ issuerInput = DEFAULT_ISSUER } = {}) {
+  issuer = new URL(issuerInput).href
+  resource = new URL('/mcp', issuer).href
   dir = await fs.mkdtemp(path.join(os.tmpdir(), 'og-oauth-http-'))
   store = createOAuthStore({ stateDir: dir })
   const clients = createClientsStore(store, () => {})
@@ -67,11 +68,20 @@ async function authorize(clientId, query = {}) {
   const cookie = response.headers.get('set-cookie')?.split(';')[0]
   return { response, html, id, csrf, cookie }
 }
-async function approve(consent, linkCode = 'ONE-TIME-LINK') {
+async function approve(consent, linkCode = 'ONE-TIME-LINK', csrf = consent.csrf) {
   const response = await fetch(base + '/authorize/consent', {
     method: 'POST', redirect: 'manual',
-    headers: { origin: issuer, 'sec-fetch-site': 'same-origin', cookie: consent.cookie, 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ id: consent.id, csrf: consent.csrf, link_code: linkCode, decision: 'approve' })
+    headers: { origin: new URL(issuer).origin, 'sec-fetch-site': 'same-origin', cookie: consent.cookie, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ id: consent.id, csrf, link_code: linkCode, decision: 'approve' })
+  })
+  return response
+}
+
+async function deny(consent) {
+  const response = await fetch(base + '/authorize/consent', {
+    method: 'POST', redirect: 'manual',
+    headers: { origin: new URL(issuer).origin, 'sec-fetch-site': 'same-origin', cookie: consent.cookie, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ id: consent.id, csrf: consent.csrf, decision: 'deny' })
   })
   return response
 }
@@ -92,6 +102,7 @@ describe('MCP OAuth HTTP flow', () => {
 
   it('requires resource, uses consent + link redemption, verifies PKCE, and binds the access-token audience', async () => {
     await start()
+    const metadata = await fetch(base + '/.well-known/oauth-authorization-server').then(r => r.json())
     const registered = await register()
     expect(registered.response.status).toBe(201)
     const deniedTarget = await authorize(registered.body.client_id, { resource: undefined })
@@ -104,6 +115,8 @@ describe('MCP OAuth HTTP flow', () => {
     expect(consent.html).toContain('client.example')
     const response = await approve(consent)
     expect(response.status).toBe(303)
+    const issuedBy = new URL(response.headers.get('location')).searchParams.get('iss')
+    expect(issuedBy).toBe(metadata.issuer)
     const code = new URL(response.headers.get('location')).searchParams.get('code')
 
     const wrong = await fetch(base + '/token', {
@@ -124,6 +137,38 @@ describe('MCP OAuth HTTP flow', () => {
     const unauthorized = await fetch(base + '/protected')
     expect(unauthorized.status).toBe(401)
     expect(unauthorized.headers.get('www-authenticate')).toContain('resource_metadata=')
+  })
+
+  it('rejects consent approval when csrf token mismatches', async () => {
+    await start()
+    const registered = await register()
+    const consent = await authorize(registered.body.client_id)
+    const tampered = await approve(consent, 'ONE-TIME-LINK', 'wrong-csrf-token')
+    expect(tampered.status).toBe(403)
+    expect(await tampered.text()).toContain('Request refused')
+  })
+
+  it('uses the exact issuer string on consent deny redirects', async () => {
+    await start()
+    const metadata = await fetch(base + '/.well-known/oauth-authorization-server').then(r => r.json())
+    const registered = await register()
+    const consent = await authorize(registered.body.client_id)
+    const response = await deny(consent)
+    expect(response.status).toBe(303)
+    const location = new URL(response.headers.get('location'))
+    expect(location.searchParams.get('error')).toBe('access_denied')
+    expect(location.searchParams.get('iss')).toBe(metadata.issuer)
+  })
+
+  it('keeps issuer exact when configured with a trailing slash', async () => {
+    await start({ issuerInput: 'http://localhost/' })
+    const metadata = await fetch(base + '/.well-known/oauth-authorization-server').then(r => r.json())
+    const registered = await register()
+    const consent = await authorize(registered.body.client_id)
+    const response = await approve(consent)
+    expect(response.status).toBe(303)
+    const issuedBy = new URL(response.headers.get('location')).searchParams.get('iss')
+    expect(issuedBy).toBe(metadata.issuer)
   })
 
   it('refuses insecure dynamic-client redirect URIs', async () => {
