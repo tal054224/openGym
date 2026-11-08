@@ -23,7 +23,9 @@ if (!['https:', 'http:'].includes(base.protocol) || base.username || base.passwo
 }
 if (process.env.NODE_ENV === 'production' && base.protocol !== 'https:') throw new Error('PUBLIC_BASE_URL must use HTTPS in production')
 const PUBLIC_BASE_URL = base.origin
-const RESOURCE_URL = new URL('/mcp', PUBLIC_BASE_URL)
+const OAUTH_ISSUER = new URL(PUBLIC_BASE_URL).href
+const OAUTH_ISSUER_URL = new URL(OAUTH_ISSUER)
+const RESOURCE_URL = new URL('/mcp', OAUTH_ISSUER_URL)
 const METADATA_URL = getOAuthProtectedResourceMetadataUrl(RESOURCE_URL)
 const allowedOrigins = new Set([base.origin, ...(process.env.MCP_ALLOWED_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean)])
 const serviceTokenFile = process.env.MCP_SERVICE_TOKEN_FILE
@@ -34,9 +36,9 @@ const tokenDigest = crypto.createHash('sha256').update(serviceSecret).digest()
 const log = (event, clientId, outcome) => console.log(JSON.stringify({ event, client_id: clientId || null, outcome }))
 const state = createOAuthStore()
 const clientsStore = createClientsStore(state, log)
-const provider = createOAuthProvider({ store: state, clientsStore, baseUrl: PUBLIC_BASE_URL, resourceUrl: RESOURCE_URL.href, log })
-const oauthMetadata = createOAuthMetadata({ provider, issuerUrl: new URL(PUBLIC_BASE_URL), baseUrl: new URL(PUBLIC_BASE_URL), scopesSupported: SUPPORTED_SCOPES })
-const prm = { resource: RESOURCE_URL.href, authorization_servers: [new URL(PUBLIC_BASE_URL).href], scopes_supported: SUPPORTED_SCOPES, resource_name: 'openGym' }
+const provider = createOAuthProvider({ store: state, clientsStore, baseUrl: OAUTH_ISSUER, resourceUrl: RESOURCE_URL.href, log })
+const oauthMetadata = createOAuthMetadata({ provider, issuerUrl: OAUTH_ISSUER_URL, baseUrl: OAUTH_ISSUER_URL, scopesSupported: SUPPORTED_SCOPES })
+const prm = { resource: RESOURCE_URL.href, authorization_servers: [OAUTH_ISSUER], scopes_supported: SUPPORTED_SCOPES, resource_name: 'openGym' }
 
 function security(app) {
   app.disable('x-powered-by')
@@ -71,7 +73,7 @@ publicApp.use(express.urlencoded({ extended: false, limit: '64kb', parameterLimi
 
 publicApp.get('/.well-known/oauth-protected-resource', (_req, res) => res.json(prm))
 mountConsentRoute(publicApp, {
-  store: state, baseUrl: PUBLIC_BASE_URL, issuerUrl: PUBLIC_BASE_URL,
+  store: state, baseUrl: OAUTH_ISSUER, issuerUrl: OAUTH_ISSUER,
   redeemLink: async code => {
     const result = await apiCall(null, '/api/internal/mcp/link-code/redeem', { method: 'POST', body: { code } })
     return result.profile_id
@@ -92,7 +94,7 @@ const verifyClientSecret = (req, res, next) => {
 }
 publicApp.use(['/token', '/revoke'], verifyClientSecret)
 publicApp.use(mcpAuthRouter({
-  provider, issuerUrl: new URL(PUBLIC_BASE_URL), baseUrl: new URL(PUBLIC_BASE_URL),
+  provider, issuerUrl: OAUTH_ISSUER_URL, baseUrl: OAUTH_ISSUER_URL,
   resourceServerUrl: RESOURCE_URL, scopesSupported: SUPPORTED_SCOPES, resourceName: 'openGym',
   clientRegistrationOptions: { rateLimit: { windowMs: 60 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false } }
 }))
